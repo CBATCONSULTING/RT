@@ -7,9 +7,12 @@ import datetime
 import tempfile
 import os
 
+VERSION = "1972"  # Modifie à chaque nouvelle version
+
 st.set_page_config(page_title="Relevé technique", layout="centered")
 
 st.title("📏 Relevé technique de pièce (angles intérieurs et extérieurs)")
+st.caption(f"Version : {VERSION}")
 
 client = st.text_input("Nom du client")
 email_dest = st.text_input("Adresse email destinataire (optionnel)")
@@ -90,6 +93,7 @@ if st.button("Générer et télécharger le PDF"):
     pdf.cell(0, 10, f"Murs saisis : {nb_murs}", 0, 1)
     if email_dest:
         pdf.cell(0, 10, f"Email destinataire : {email_dest}", 0, 1)
+    pdf.cell(0, 10, f"Version : {VERSION}", 0, 1)
 
     # Ajout du schéma (tempfile obligatoire pour FPDF)
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
@@ -128,4 +132,3 @@ if st.button("Générer et télécharger le PDF"):
 
     # Nettoyage du fichier temporaire
     os.remove(image_path)
-
