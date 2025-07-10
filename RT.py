@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1007.01"
+VERSION = "1007.02"
 METREURS = ["Jean-Baptiste", "Julie", "Paul"]
 EMAILS = [
     "support@challengebat.fr",
@@ -101,7 +101,7 @@ nb_contraintes = st.number_input("Nombre de contraintes à déclarer", min_value
 
 CONTRAINTES_CHOIX = [
     "Porte", "Fenêtre", "Socle", "Coffrage", "Poteau", "Trappe",
-    "VMC", "Gaz", "Interrupteur", "Autre (Préciser)"
+    "VMC", "Gaz", "Interrupteur", "Faïence (Attention si HS < 92 cm)", "Autre (Préciser)"
 ]
 contraintes = []
 for i in range(int(nb_contraintes)):
