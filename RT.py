@@ -1,13 +1,49 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import math
-from fpdf import FPDF
 import datetime
 import tempfile
 import os
+import requests
+import smtplib
+from email.message import EmailMessage
+from email.utils import formataddr
+from fpdf import FPDF
 
-VERSION = "1972"
+VERSION = "1007.01"
 METREURS = ["Jean-Baptiste", "Julie", "Paul"]
+EMAILS = [
+    "support@challengebat.fr",
+    "stevens@challengebat.fr",
+    "autre..."
+]
+LOGO_URL = "https://static.wixstatic.com/media/9c09bd_194e3777ea134f9a99bc086cb7173909~mv2.png"
+
+def get_smtp_password():
+    url = "https://9c09bdff-4d5d-401b-9aa7-6e6874bb2cf7.usrfiles.com/ugd/9c09bd_f611b6e2d24e451080d57fe23b426b75.txt"
+    resp = requests.get(url)
+    return resp.text.strip()
+
+def envoyer_gmail(destinataire, sujet, html_message, pdf_path, nom_pdf):
+    smtp_user = "cbatconsulting@gmail.com"
+    smtp_pass = get_smtp_password()
+    expediteur = formataddr(("CHALLENGE BAT", smtp_user))
+    msg = EmailMessage()
+    msg["From"] = expediteur
+    msg["To"] = destinataire
+    msg["Subject"] = sujet
+    msg.set_content("Relevé technique Challenge BAT en pièce jointe.")
+    msg.add_alternative(html_message, subtype="html")
+    with open(pdf_path, "rb") as pdf_file:
+        pdf_data = pdf_file.read()
+        msg.add_attachment(pdf_data, maintype="application", subtype="pdf", filename=nom_pdf)
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(smtp_user, smtp_pass)
+            smtp.send_message(msg)
+        return True, "Email envoyé"
+    except Exception as e:
+        return False, f"Erreur lors de l'envoi : {e}"
 
 st.set_page_config(page_title="Relevé technique", layout="centered")
 st.title("📏 Relevé technique de pièce (angles intérieurs et extérieurs)")
@@ -15,10 +51,16 @@ st.caption(f"Version : {VERSION}")
 
 client = st.text_input("Nom du client")
 metreur = st.selectbox("Sélectionnez votre prénom", METREURS)
-email_dest = st.text_input("Adresse email destinataire (optionnel)")
+
+email_choix = st.selectbox("Adresse email destinataire", EMAILS)
+if email_choix == "autre...":
+    email_dest = st.text_input("Saisissez une autre adresse email")
+else:
+    email_dest = email_choix
 
 now = datetime.datetime.now()
 date_str = now.strftime("%d-%m-%Y_%H-%M")
+nom_pdf = f"RT_{client or 'client'}_{date_str}.pdf"
 
 st.markdown("""
 - Départ en bas à droite, premier mur vers la gauche.
@@ -41,8 +83,6 @@ for i in range(nb_murs):
         angles.append(angle)
         ext = cols[2].checkbox("Extérieur", key=f"ext{i}")
         exterieurs.append(ext)
-
-# === QUESTIONS SUPPLÉMENTAIRES ===
 
 st.header("Informations complémentaires")
 
@@ -74,17 +114,17 @@ for i in range(int(nb_contraintes)):
     c_pos = st.number_input("Position depuis la gauche (cm)", min_value=0.0, max_value=10000.0, value=0.0, key=f"cpos_{i}")
     c_larg = st.number_input("Largeur (cm)", min_value=1.0, max_value=500.0, value=10.0, key=f"clarg_{i}")
     c_epais = st.number_input("Épaisseur (cm)", min_value=1.0, max_value=200.0, value=5.0, key=f"cepais_{i}")
-    c_haut = st.number_input("Hauteur depuis le sol (cm)", min_value=0.0, max_value=500.0, value=10.0, key=f"chaut_{i}")
+    c_haut_sol = st.number_input("Hauteur depuis le sol (cm)", min_value=0.0, max_value=500.0, value=10.0, key=f"chaut_sol_{i}")
+    c_haut = st.number_input("Hauteur de la contrainte (cm)", min_value=1.0, max_value=500.0, value=50.0, key=f"chaut_{i}")
     contraintes.append({
         "type": c_type if c_type != "Autre (Préciser)" else c_type_precise,
         "mur": c_mur,
         "pos": c_pos,
         "larg": c_larg,
         "epais": c_epais,
+        "haut_sol": c_haut_sol,
         "haut": c_haut
     })
-
-# === BLOC TABLEAU ELECTRIQUE ===
 
 st.subheader("Emplacement du tableau de répartition")
 tableau_emplacement = st.selectbox(
@@ -97,12 +137,12 @@ else:
     tableau_emplacement_precise = ""
 
 tableau_developpe = st.number_input("Développé linéaire depuis le centre de la cuisine (mètres)", min_value=0.0, max_value=100.0, value=0.0, step=0.1)
-tableau_cloisons = st.radio("Y a-t-il des cloisons à traverser ?", ("Non", "Oui"))
-tableau_place_deux = st.radio("Y a-t-il de la place pour un second coffret si nécessaire ?", ("Non", "Oui"))
+tableau_cloisons = st.radio("Y a-t-il des cloisons à traverser ?", ("Pas de retirage nécessaire" , "Non", "Oui"))
+tableau_place_deux = st.radio("Y a-t-il de la place pour un second coffret si nécessaire ?", ("Pas de retirage nécessaire" , "Non", "Oui"))
 
 commentaire = st.text_area("Commentaire (optionnel)", "")
 
-# === SCHÉMA TECHNIQUE (Lettres décalées) ===
+# ========== Générer le graphique du plan ==========
 
 x, y = 0, 0
 points = [(x, y)]
@@ -124,7 +164,6 @@ fig, ax = plt.subplots(figsize=(6, 8))
 x_coords, y_coords = zip(*points)
 ax.plot(x_coords, y_coords, marker='o', color='blue', linewidth=2)
 
-# Dimensions sur chaque mur
 for i in range(1, len(points)):
     x1, y1 = points[i-1]
     x2, y2 = points[i]
@@ -132,14 +171,12 @@ for i in range(1, len(points)):
     ax.text(mx, my, f"{longueurs[i-1]:.0f} cm", fontsize=12, color='red', ha='center', va='bottom',
             bbox=dict(facecolor='white', alpha=0.6, edgecolor='none'))
 
-# Angles aux sommets
 for i in range(1, len(points)-1):
     x, y = points[i]
     color = 'red' if exterieurs[i-1] else 'green'
     ax.text(x, y, f"{angles[i-1]:.0f}°", fontsize=11, color=color, ha='left', va='top',
             bbox=dict(facecolor='white', alpha=0.6, edgecolor='none'))
 
-# Lettres décalées à l'intérieur du polygone
 for i in range(nb_murs):
     x1, y1 = points[i]
     x2, y2 = points[i+1]
@@ -147,13 +184,12 @@ for i in range(nb_murs):
     dx = x2 - x1
     dy = y2 - y1
     norm = math.hypot(dx, dy)
-    # Vecteur perpendiculaire, direction vers l'intérieur
     if norm == 0:
         perp_x, perp_y = 0, 0
     else:
         perp_x = -dy / norm
         perp_y = dx / norm
-    decal = 8  # Ajuste le décalage ici
+    decal = 8
     label_x = mx + perp_x * decal
     label_y = my + perp_y * decal
     ax.text(label_x, label_y, chr(ord('A')+i), fontsize=16, color='black', fontweight='bold', ha='center', va='center')
@@ -166,98 +202,123 @@ ax.grid(True)
 ax.invert_yaxis()
 st.pyplot(fig)
 
-# === PDF ===
+# Sauvegarde temporaire de l'image du schéma
+with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
+    fig.savefig(tmpfile.name, format="png", bbox_inches='tight')
+    image_path = tmpfile.name
 
-if st.button("Générer et télécharger le PDF"):
-    pdf = FPDF(orientation='P', unit='mm', format='A4')
+def make_pdf_message(
+    client, metreur, hsp, murs, angles, exterieurs, contraintes, commentaire, now,
+    evac_mur, evac_pos, evac_largeur, evac_epaisseur, evac_hauteur,
+    tableau_emplacement, tableau_emplacement_precise, tableau_developpe, tableau_cloisons, tableau_place_deux,
+    email_dest, version, image_path
+):
+    pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    titre = f"Relevé - {client or 'Client'} - {date_str}"
-    pdf.cell(0, 10, titre, 0, 1, 'C')
-    pdf.set_font("Arial", '', 12)
-    pdf.cell(0, 10, f"Nom du client : {client}", 0, 1)
-    pdf.cell(0, 10, f"Prénom du métreur : {metreur}", 0, 1)
-    pdf.cell(0, 10, f"Date : {now.strftime('%d/%m/%Y à %H:%M')}", 0, 1)
-    pdf.cell(0, 10, f"Murs saisis : {nb_murs}", 0, 1)
-    pdf.cell(0, 10, f"Hauteur sous plafond : {hsp} cm", 0, 1)
-    pdf.cell(0, 10, f"Version : {VERSION}", 0, 1)
-    if email_dest:
-        pdf.cell(0, 10, f"Email destinataire : {email_dest}", 0, 1)
+    # Logo
+    try:
+        pdf.image(LOGO_URL, x=80, w=50)
+        pdf.ln(2)
+    except Exception:
+        pass
 
-    # Schéma technique
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
-        fig.savefig(tmpfile.name, format="png", bbox_inches='tight')
-        pdf.image(tmpfile.name, x=10, y=None, w=190)
-        image_path = tmpfile.name
-
-    # Tableau murs
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(15, 8, "Mur", 1)
-    pdf.cell(35, 8, "Longueur (cm)", 1)
-    pdf.cell(35, 8, "Angle (°)", 1)
-    pdf.cell(25, 8, "Extérieur", 1)
-    pdf.ln()
-    pdf.set_font("Arial", '', 12)
-    for i in range(nb_murs):
-        mur_nom = chr(ord('A')+i)
-        pdf.cell(15, 8, f"{mur_nom}", 1)
-        pdf.cell(35, 8, f"{longueurs[i]:.0f}", 1)
-        if i < nb_murs-1:
-            pdf.cell(35, 8, f"{angles[i]:.1f}", 1)
-            pdf.cell(25, 8, "Oui" if exterieurs[i] else "Non", 1)
-        else:
-            pdf.cell(35, 8, "-", 1)
-            pdf.cell(25, 8, "-", 1)
-        pdf.ln()
-
-    # Infos évacuation
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 12, "RELEVÉ TECHNIQUE", ln=True, align="C")
+    pdf.set_font("Arial", "", 13)
+    pdf.cell(0, 8, f"Challenge BAT - {now.strftime('%d/%m/%Y')} (V{version})", ln=True, align="C")
     pdf.ln(2)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 8, "Evacuation finale :", 0, 1)
-    pdf.set_font("Arial", '', 12)
-    pdf.cell(0, 8, f"Mur : {evac_mur}", 0, 1)
-    pdf.cell(0, 8, f"Position depuis la gauche : {evac_pos} cm", 0, 1)
-    pdf.cell(0, 8, f"Largeur : {evac_largeur} cm", 0, 1)
-    pdf.cell(0, 8, f"Epaisseur : {evac_epaisseur} cm", 0, 1)
-    pdf.cell(0, 8, f"Hauteur depuis le sol : {evac_hauteur} cm", 0, 1)
-
-    # Bloc tableau de répartition
+    pdf.set_draw_color(180, 180, 180)
+    pdf.set_line_width(0.6)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(2)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 8, "Tableau de répartition :", 0, 1)
-    pdf.set_font("Arial", '', 12)
-    if tableau_emplacement == "Autre":
-        pdf.cell(0, 8, f"Emplacement : {tableau_emplacement_precise}", 0, 1)
-    else:
-        pdf.cell(0, 8, f"Emplacement : {tableau_emplacement}", 0, 1)
-    pdf.cell(0, 8, f"Développé linéaire depuis centre cuisine : {tableau_developpe:.2f} m", 0, 1)
-    pdf.cell(0, 8, f"Cloisons à traverser : {tableau_cloisons}", 0, 1)
-    pdf.cell(0, 8, f"Place pour second coffret : {tableau_place_deux}", 0, 1)
 
-    # Contraintes
+    # --- Bloc Identité ---
+    pdf.set_font("Arial", "B", 13)
+    pdf.cell(0, 10, "Informations du relevé", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 8, f"Nom du client : {client}", ln=True)
+    pdf.cell(0, 8, f"Prénom du métreur : {metreur}", ln=True)
+    pdf.cell(0, 8, f"Adresse email destinataire : {email_dest}", ln=True)
+    pdf.cell(0, 8, f"Date : {now.strftime('%d/%m/%Y à %Hh%M')}", ln=True)
+    pdf.ln(3)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Résumé des murs", ln=True)
+    pdf.set_font("Arial", "", 11)
+    for i, l in enumerate(murs):
+        a = angles[i] if i < len(angles) else "-"
+        pdf.cell(0, 7, f"Mur {chr(65+i)} : {l:.0f} cm, angle intérieur {a}°", ln=1)
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Hauteur sous plafond (HSP)", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 7, f"{hsp} cm", ln=True)
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Évacuation finale", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 7, f"Mur : {evac_mur}, Position gauche : {evac_pos} cm, Largeur : {evac_largeur} cm, "
+                   f"Épaisseur : {evac_epaisseur} cm, Hauteur sol : {evac_hauteur} cm", ln=True)
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Contraintes", ln=True)
+    pdf.set_font("Arial", "", 11)
     if contraintes:
-        pdf.ln(2)
-        pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 8, "Contraintes :", 0, 1)
-        pdf.set_font("Arial", '', 12)
-        for idx, c in enumerate(contraintes):
-            pdf.cell(0, 8, f"{idx+1:02d}. {c['type']} - Mur {c['mur']} | Pos : {c['pos']} cm | Larg : {c['larg']} cm | Epais : {c['epais']} cm | Haut : {c['haut']} cm", 0, 1)
+        for i, c in enumerate(contraintes, 1):
+            pdf.cell(0, 7, f"{i:02d}. {c.get('type', '-')}"
+                           f" - Mur {c.get('mur', '-')}"
+                           f" | Pos : {c.get('pos', '-')} cm"
+                           f" | Larg : {c.get('larg', '-')} cm"
+                           f" | Epais : {c.get('epais', '-')} cm"
+                           f" | Haut. sol : {c.get('haut_sol', '-')} cm"
+                           f" | Haut. contrainte : {c.get('haut', '-')} cm", ln=1)
+    else:
+        pdf.cell(0, 7, "Aucune contrainte renseignée.", ln=True)
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Emplacement du tableau de répartition", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 7, f"Emplacement : {tableau_emplacement} {tableau_emplacement_precise}", ln=True)
+    pdf.cell(0, 7, f"Développé linéaire : {tableau_developpe} m", ln=True)
+    pdf.cell(0, 7, f"Cloisons à traverser : {tableau_cloisons}", ln=True)
+    pdf.cell(0, 7, f"Place pour second coffret : {tableau_place_deux}", ln=True)
+    pdf.ln(2)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Commentaire", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.multi_cell(0, 7, commentaire or "-")
+    pdf.ln(3)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Schéma du relevé technique", ln=True)
+    try:
+        pdf.image(image_path, x=20, w=170)
+    except Exception:
+        pass
+    return pdf.output(dest='S').encode('latin1')
 
-    # Commentaire
-    if commentaire.strip():
-        pdf.ln(2)
-        pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 8, "Commentaire :", 0, 1)
-        pdf.set_font("Arial", '', 12)
-        pdf.multi_cell(0, 8, commentaire)
-
-    pdf_bytes = pdf.output(dest='S').encode('latin-1')
-    st.download_button(
-        label="📥 Télécharger le PDF",
-        data=pdf_bytes,
-        file_name=f"{client or 'client'}_{date_str}.pdf",
-        mime="application/pdf"
-    )
-
-    os.remove(image_path)
+if st.button("Envoyer le relevé par email"):
+    if not client or not metreur or not email_dest:
+        st.error("Veuillez remplir tous les champs obligatoires.")
+    else:
+        pdf_bytes = make_pdf_message(
+            client, metreur, hsp, longueurs, angles, exterieurs, contraintes, commentaire, now,
+            evac_mur, evac_pos, evac_largeur, evac_epaisseur, evac_hauteur,
+            tableau_emplacement, tableau_emplacement_precise, tableau_developpe, tableau_cloisons, tableau_place_deux,
+            email_dest, VERSION, image_path
+        )
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
+            f.write(pdf_bytes)
+            pdf_path = f.name
+        sujet = f"RELEVÉ TECHNIQUE - {client} - {now.strftime('%d/%m/%Y %Hh%M')}"
+        html_message = f"""
+        <p>Bonjour,<br>Votre relevé technique est en pièce jointe.<br>
+        <b>Nom du client :</b> {client}<br>
+        <b>Métreur :</b> {metreur}</p>
+        """
+        ok, msg = envoyer_gmail(email_dest, sujet, html_message, pdf_path, nom_pdf)
+        if ok:
+            st.success("Email envoyé !")
+            st.download_button("Télécharger le PDF", pdf_bytes, file_name=nom_pdf, mime="application/pdf")
+        else:
+            st.error(msg)
+        os.unlink(pdf_path)
+        os.unlink(image_path)
