@@ -10,9 +10,9 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1107.24"
+VERSION = "1107.25"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
-EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "autre..."]
+EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "julie@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
 LOGO_URL = "https://static.wixstatic.com/media/9c09bd_194e3777ea134f9a99bc086cb7173909~mv2.png"
 
@@ -21,7 +21,7 @@ if "form_submitted" not in st.session_state:
 
 st.set_page_config(page_title="Relevé technique", layout="centered")
 
-# ---- Bloc logo + titre personnalisé (corrigé) ----
+# ---- Bloc logo + titre personnalisé ----
 st.markdown(
     f"""
     <div style='width:100%; text-align:center; margin-bottom:8px;'>
@@ -186,6 +186,7 @@ elif tva_reduite == "Non":
     justif_non = st.selectbox(
         "Justification du refus TVA réduite :",
         [
+            "/",
             "Client absent",
             "Logement moins de 2 ans",
             "Entreprise"
@@ -337,9 +338,11 @@ def make_pdf_message(
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Résumé des murs", ln=True)
     pdf.set_font("Arial", "", 11)
+    murs_text = []
     for i, l in enumerate(murs):
         a = angles[i] if i < len(angles) else "-"
-        pdf.cell(0, 7, f"Mur {chr(65+i)} : {l:.0f} cm, angle intérieur {a}°", ln=1)
+        murs_text.append(f"Mur {chr(65+i)} : {l:.0f} cm, angle intérieur {a}°")
+    pdf.multi_cell(0, 7, "\n".join(murs_text))
     pdf.ln(2)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Hauteur sous plafond (HSP)", ln=True)
@@ -349,21 +352,21 @@ def make_pdf_message(
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Évacuation finale", ln=True)
     pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 7, f"Mur : {evac_mur}, Position gauche : {evac_pos} cm, Largeur : {evac_largeur} cm, "
-                   f"Épaisseur : {evac_epaisseur} cm, Hauteur sol : {evac_hauteur} cm", ln=True)
+    pdf.multi_cell(0, 7, f"Mur : {evac_mur}, Position gauche : {evac_pos} cm, Largeur : {evac_largeur} cm, "
+                   f"Épaisseur : {evac_epaisseur} cm, Hauteur sol : {evac_hauteur} cm")
     pdf.ln(2)
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Contraintes", ln=True)
     pdf.set_font("Arial", "", 11)
     if contraintes:
         for i, c in enumerate(contraintes, 1):
-            pdf.cell(0, 7, f"{i:02d}. {c.get('type', '-')}"
-                           f" - Mur {c.get('mur', '-')}"
-                           f" | Pos : {c.get('pos', '-')} cm"
-                           f" | Larg : {c.get('larg', '-')} cm"
-                           f" | Epais : {c.get('epais', '-')} cm"
-                           f" | Haut. sol : {c.get('haut_sol', '-')} cm"
-                           f" | Haut. contrainte : {c.get('haut', '-')} cm", ln=1)
+            pdf.multi_cell(0, 7, f"{i:02d}. {c.get('type', '-')}"
+                f" - Mur {c.get('mur', '-')}"
+                f" | Pos : {c.get('pos', '-')} cm"
+                f" | Larg : {c.get('larg', '-')} cm"
+                f" | Epais : {c.get('epais', '-')} cm"
+                f" | Haut. sol : {c.get('haut_sol', '-')} cm"
+                f" | Haut. contrainte : {c.get('haut', '-')} cm")
     else:
         pdf.cell(0, 7, "Aucune contrainte renseignée.", ln=True)
     pdf.ln(2)
