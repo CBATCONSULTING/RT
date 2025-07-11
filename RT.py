@@ -10,13 +10,9 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1007.02"
-METREURS = ["Jean-Baptiste", "Julie", "Paul"]
-EMAILS = [
-    "support@challengebat.fr",
-    "stevens@challengebat.fr",
-    "autre..."
-]
+VERSION = "1107.03"
+METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
+EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "autre..."]
 LOGO_URL = "https://static.wixstatic.com/media/9c09bd_194e3777ea134f9a99bc086cb7173909~mv2.png"
 
 def get_smtp_password():
@@ -32,7 +28,7 @@ def envoyer_gmail(destinataire, sujet, html_message, pdf_path, nom_pdf):
     msg["From"] = expediteur
     msg["To"] = destinataire
     msg["Subject"] = sujet
-    msg.set_content("Relevé technique Challenge BAT en pièce jointe.")
+    msg.set_content("Relevé technique en pièce jointe.")
     msg.add_alternative(html_message, subtype="html")
     with open(pdf_path, "rb") as pdf_file:
         pdf_data = pdf_file.read()
@@ -49,12 +45,15 @@ st.set_page_config(page_title="Relevé technique", layout="centered")
 st.title("📏 Relevé technique de pièce (angles intérieurs et extérieurs)")
 st.caption(f"Version : {VERSION}")
 
-client = st.text_input("Nom du client")
-metreur = st.selectbox("Sélectionnez votre prénom", METREURS)
+st.markdown("<span style='color:red'>* Champs obligatoires</span>", unsafe_allow_html=True)
 
-email_choix = st.selectbox("Adresse email destinataire", EMAILS)
+client = st.text_input("Nom du client *")
+metreur = st.selectbox("Sélectionnez votre prénom *", METREURS)
+email_choix = st.selectbox("Adresse email destinataire *", EMAILS)
 if email_choix == "autre...":
-    email_dest = st.text_input("Saisissez une autre adresse email")
+    email_dest = st.text_input("Saisissez une autre adresse email *")
+elif email_choix == "-- Sélectionnez --":
+    email_dest = ""
 else:
     email_dest = email_choix
 
@@ -86,7 +85,8 @@ for i in range(nb_murs):
 
 st.header("Informations complémentaires")
 
-hsp = st.number_input("Hauteur sous plafond (HSP) en cm", min_value=100, max_value=400, value=250, step=1)
+# HSP obligatoire : valeur par défaut = 0, min_value = 0
+hsp = st.number_input("Hauteur sous plafond (HSP) en cm *", min_value=0, max_value=400, value=0, step=1)
 
 st.subheader("Évacuation finale")
 mur_choix = [chr(ord('A')+i) for i in range(nb_murs)]
@@ -139,6 +139,35 @@ else:
 tableau_developpe = st.number_input("Développé linéaire depuis le centre de la cuisine (mètres)", min_value=0.0, max_value=100.0, value=0.0, step=0.1)
 tableau_cloisons = st.radio("Y a-t-il des cloisons à traverser ?", ("Pas de retirage nécessaire" , "Non", "Oui"))
 tableau_place_deux = st.radio("Y a-t-il de la place pour un second coffret si nécessaire ?", ("Pas de retirage nécessaire" , "Non", "Oui"))
+
+# ----------- AJOUT TVA REDUITE ICI -----------
+st.subheader("TVA Réduite")
+st.markdown("<i>(logement plus de 2 ans)</i>", unsafe_allow_html=True)
+tva_reduite = st.radio("Le logement est-il éligible à la TVA réduite ?", ["Oui", "Non"])
+justif_non = ""
+attestation_signee = None
+if tva_reduite == "Oui":
+    st.success("Remplir l'attestation sur l'honneur TVA réduite ici :")
+    st.markdown(
+        "[Accéder au formulaire TVA réduite](https://www.challengebat.fr/tva-reduite)",
+        unsafe_allow_html=True,
+    )
+    attestation_signee = st.radio(
+        "Attestation signée",
+        options=["Oui", "Non"],
+        index=None,
+        key="attestation_signee_radio"
+    )
+else:
+    justif_non = st.selectbox(
+        "Justification du refus TVA réduite :",
+        [
+            "Client absent",
+            "Logement moins de 2 ans",
+            "Entreprise"
+        ]
+    )
+# ----------- FIN AJOUT TVA REDUITE -----------
 
 commentaire = st.text_area("Commentaire (optionnel)", "")
 
@@ -211,7 +240,8 @@ def make_pdf_message(
     client, metreur, hsp, murs, angles, exterieurs, contraintes, commentaire, now,
     evac_mur, evac_pos, evac_largeur, evac_epaisseur, evac_hauteur,
     tableau_emplacement, tableau_emplacement_precise, tableau_developpe, tableau_cloisons, tableau_place_deux,
-    email_dest, version, image_path
+    email_dest, version, image_path,
+    tva_reduite, justif_non, attestation_signee
 ):
     pdf = FPDF()
     pdf.add_page()
@@ -282,6 +312,20 @@ def make_pdf_message(
     pdf.cell(0, 7, f"Cloisons à traverser : {tableau_cloisons}", ln=True)
     pdf.cell(0, 7, f"Place pour second coffret : {tableau_place_deux}", ln=True)
     pdf.ln(2)
+
+    # ----------- AJOUT TVA REDUITE PDF -----------
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "TVA Réduite", ln=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 7, f"Eligibilité : {tva_reduite}", ln=True)
+    if tva_reduite == "Oui":
+        pdf.cell(0, 7, "Lien attestation : https://www.challengebat.fr/tva-reduite", ln=True)
+        pdf.cell(0, 7, f"Attestation signée : {attestation_signee}", ln=True)
+    else:
+        pdf.cell(0, 7, f"Justification : {justif_non}", ln=True)
+    pdf.ln(2)
+    # ----------- FIN AJOUT TVA REDUITE PDF -----------
+
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Commentaire", ln=True)
     pdf.set_font("Arial", "", 11)
@@ -296,21 +340,30 @@ def make_pdf_message(
     return pdf.output(dest='S').encode('latin1')
 
 if st.button("Envoyer le relevé par email"):
-    if not client or not metreur or not email_dest:
+    if (
+        not client
+        or metreur == "-- Sélectionnez --"
+        or not email_dest
+        or email_choix == "-- Sélectionnez --"
+        or hsp <= 0
+    ):
         st.error("Veuillez remplir tous les champs obligatoires.")
+    elif tva_reduite == "Oui" and (attestation_signee is None or attestation_signee == "Non"):
+        st.error("Vous devez signer l'attestation TVA réduite pour valider le formulaire.")
     else:
         pdf_bytes = make_pdf_message(
             client, metreur, hsp, longueurs, angles, exterieurs, contraintes, commentaire, now,
             evac_mur, evac_pos, evac_largeur, evac_epaisseur, evac_hauteur,
             tableau_emplacement, tableau_emplacement_precise, tableau_developpe, tableau_cloisons, tableau_place_deux,
-            email_dest, VERSION, image_path
+            email_dest, VERSION, image_path,
+            tva_reduite, justif_non, attestation_signee
         )
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
             f.write(pdf_bytes)
             pdf_path = f.name
         sujet = f"RELEVÉ TECHNIQUE - {client} - {now.strftime('%d/%m/%Y %Hh%M')}"
         html_message = f"""
-        <p>Bonjour,<br>Votre relevé technique est en pièce jointe.<br>
+        <p>Bonjour,<br>Relevé technique en pièce jointe.<br>
         <b>Nom du client :</b> {client}<br>
         <b>Métreur :</b> {metreur}</p>
         """
