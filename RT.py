@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1107.20"
+VERSION = "1107.24"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
 EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
@@ -49,6 +49,30 @@ if st.session_state["form_submitted"] and not client:
 metreur = st.selectbox("Sélectionnez votre prénom *", METREURS, key="metreur")
 if st.session_state["form_submitted"] and metreur == "-- Sélectionnez --":
     st.error("Veuillez sélectionner votre prénom.", icon="⚠️")
+
+# ------ Nouvelle question : Mesure valeur mise à la terre ------
+st.markdown("""
+<span style="font-size:1.1em; font-weight:600;">
+    Mesure valeur mise à la terre
+    <a href="https://www.challengebat.fr/valeur-mesure-terre" target="_blank" title="Lien vers explicatif"
+       style="vertical-align:middle; margin-left:6px; text-decoration:none;">
+        <span style="color:#22c55e; font-size:1.2em;">🔗</span>
+    </a>
+</span>
+<div style="color:#666; font-size:0.95em; margin-bottom:0.35em;">
+    Mesurer en 3 points différents
+</div>
+""", unsafe_allow_html=True)
+valeur_terre = st.radio(
+    "Mesure valeur mise à la terre (obligatoire)",
+    ["Valeur ok", "Valeur pas ok"],
+    key="valeur_terre",
+    index=None,
+    label_visibility="collapsed"
+)
+if st.session_state["form_submitted"] and not valeur_terre:
+    st.error("Veuillez indiquer la valeur de la terre.", icon="⚠️")
+# ------------------------------------------------------------
 
 now = datetime.datetime.now()
 date_str = now.strftime("%d-%m-%Y_%H-%M")
@@ -101,7 +125,7 @@ if st.session_state["form_submitted"] and nb_contraintes == 0:
     st.error("Veuillez déclarer au moins une contrainte.", icon="⚠️")
 
 CONTRAINTES_CHOIX = [
-    "Porte", "Fenêtre", "Socle", "Coffrage", "Poteau", "Trappe",
+    "Porte", "Fenêtre", "Regroupement plomberie", "Socle", "Coffrage", "Poteau", "Trappe",
     "VMC", "Gaz", "Interrupteur", "Faïence (si HS < 92 cm)", "Plinthes (si épaisseur > 1 cm ET hauteur > 8 cm)", "Autre (Préciser)"
 ]
 contraintes = []
@@ -381,6 +405,7 @@ if st.button("Envoyer le relevé par email"):
     champs_vides = (
         not client
         or metreur == "-- Sélectionnez --"
+        or not valeur_terre
         or not email_dest
         or email_choix == "-- Sélectionnez --"
         or hsp <= 0
