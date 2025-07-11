@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1107.15"
+VERSION = "1107.17"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
 EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
@@ -20,9 +20,27 @@ if "form_submitted" not in st.session_state:
     st.session_state["form_submitted"] = False
 
 st.set_page_config(page_title="Relevé technique", layout="centered")
-st.title("📏 Relevé technique de pièce (angles intérieurs et extérieurs)")
-st.caption(f"Version : {VERSION}")
-st.markdown("<span style='color:red;'>* Champs obligatoires</span>", unsafe_allow_html=True)
+
+# ---- Bloc logo + titre personnalisé (corrigé) ----
+st.markdown(
+    f"""
+    <div style='width:100%; text-align:center; margin-bottom:8px;'>
+        <img src="{LOGO_URL}" alt="Logo Challenge BAT" style="width:80px; margin-bottom:14px;" />
+        <div style="display:inline-block;">
+            <div style="font-size:2.7rem; font-weight:800; line-height:1.12; text-align:center;">
+                Relevé Technique<br>
+                <span style="white-space:nowrap;">CHALLENGE BAT</span>
+            </div>
+            <div style="font-size:1rem; color:#666; margin: 0.2em 0 0.4em 0;">Version : {VERSION}</div>
+            <div style="color:#e74c3c; font-size:1.1rem; font-weight:500; margin-bottom:0.4em;">
+                * Champs obligatoires
+            </div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+# ---- Fin bloc titre/logo ----
 
 client = st.text_input("Nom du client *", value="", key="client")
 if st.session_state["form_submitted"] and not client:
@@ -359,7 +377,6 @@ def make_pdf_message(
         pass
     return pdf.output(dest='S').encode('latin1')
 
-# --- Bouton d'envoi et gestion des erreurs globales ---
 if st.button("Envoyer le relevé par email"):
     st.session_state["form_submitted"] = True
     champs_vides = (
