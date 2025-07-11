@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1107.17"
+VERSION = "1107.18"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
 EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
@@ -25,12 +25,12 @@ st.set_page_config(page_title="Relevé technique", layout="centered")
 st.markdown(
     f"""
     <div style='width:100%; text-align:center; margin-bottom:8px;'>
-        <img src="{LOGO_URL}" alt="Logo Challenge BAT" style="width:80px; margin-bottom:14px;" />
         <div style="display:inline-block;">
             <div style="font-size:2.7rem; font-weight:800; line-height:1.12; text-align:center;">
                 Relevé Technique<br>
                 <span style="white-space:nowrap;">CHALLENGE BAT</span>
             </div>
+            <img src="{LOGO_URL}" alt="Logo Challenge BAT" style="width:80px; margin:16px 0 6px 0; display:block; margin-left:auto; margin-right:auto;" />
             <div style="font-size:1rem; color:#666; margin: 0.2em 0 0.4em 0;">Version : {VERSION}</div>
             <div style="color:#e74c3c; font-size:1.1rem; font-weight:500; margin-bottom:0.4em;">
                 * Champs obligatoires
