@@ -10,50 +10,37 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1107.03"
+VERSION = "1107.15"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
 EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "autre..."]
+TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
 LOGO_URL = "https://static.wixstatic.com/media/9c09bd_194e3777ea134f9a99bc086cb7173909~mv2.png"
 
-def get_smtp_password():
-    url = "https://9c09bdff-4d5d-401b-9aa7-6e6874bb2cf7.usrfiles.com/ugd/9c09bd_f611b6e2d24e451080d57fe23b426b75.txt"
-    resp = requests.get(url)
-    return resp.text.strip()
-
-def envoyer_gmail(destinataire, sujet, html_message, pdf_path, nom_pdf):
-    smtp_user = "cbatconsulting@gmail.com"
-    smtp_pass = get_smtp_password()
-    expediteur = formataddr(("CHALLENGE BAT", smtp_user))
-    msg = EmailMessage()
-    msg["From"] = expediteur
-    msg["To"] = destinataire
-    msg["Subject"] = sujet
-    msg.set_content("Relevé technique en pièce jointe.")
-    msg.add_alternative(html_message, subtype="html")
-    with open(pdf_path, "rb") as pdf_file:
-        pdf_data = pdf_file.read()
-        msg.add_attachment(pdf_data, maintype="application", subtype="pdf", filename=nom_pdf)
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-            smtp.login(smtp_user, smtp_pass)
-            smtp.send_message(msg)
-        return True, "Email envoyé"
-    except Exception as e:
-        return False, f"Erreur lors de l'envoi : {e}"
+if "form_submitted" not in st.session_state:
+    st.session_state["form_submitted"] = False
 
 st.set_page_config(page_title="Relevé technique", layout="centered")
 st.title("📏 Relevé technique de pièce (angles intérieurs et extérieurs)")
 st.caption(f"Version : {VERSION}")
+st.markdown("<span style='color:red;'>* Champs obligatoires</span>", unsafe_allow_html=True)
 
-st.markdown("<span style='color:red'>* Champs obligatoires</span>", unsafe_allow_html=True)
+client = st.text_input("Nom du client *", value="", key="client")
+if st.session_state["form_submitted"] and not client:
+    st.error("Veuillez saisir le nom du client.", icon="⚠️")
 
-client = st.text_input("Nom du client *")
-metreur = st.selectbox("Sélectionnez votre prénom *", METREURS)
-email_choix = st.selectbox("Adresse email destinataire *", EMAILS)
+metreur = st.selectbox("Sélectionnez votre prénom *", METREURS, key="metreur")
+if st.session_state["form_submitted"] and metreur == "-- Sélectionnez --":
+    st.error("Veuillez sélectionner votre prénom.", icon="⚠️")
+
+email_choix = st.selectbox("Adresse email destinataire *", EMAILS, key="email_choix")
 if email_choix == "autre...":
-    email_dest = st.text_input("Saisissez une autre adresse email *")
+    email_dest = st.text_input("Saisissez une autre adresse email *", key="email_dest")
+    if st.session_state["form_submitted"] and not email_dest:
+        st.error("Veuillez renseigner une adresse email.", icon="⚠️")
 elif email_choix == "-- Sélectionnez --":
     email_dest = ""
+    if st.session_state["form_submitted"]:
+        st.error("Veuillez choisir une adresse email.", icon="⚠️")
 else:
     email_dest = email_choix
 
@@ -66,18 +53,20 @@ st.markdown("""
 - <span style="color:green">**Angle intérieur**</span> (case décochée), <span style="color:red">**extérieur**</span> (case cochée).
 """, unsafe_allow_html=True)
 
-nb_murs = st.number_input("Nombre de murs à tracer", min_value=3, max_value=20, value=4, step=1)
+nb_murs = st.number_input("Nombre de murs à tracer *", min_value=3, max_value=20, value=3, step=1, key="nb_murs")
+if st.session_state["form_submitted"] and nb_murs == 0:
+    st.error("Veuillez indiquer le nombre de murs.", icon="⚠️")
 
 longueurs = []
 angles = []
 exterieurs = []
 
-for i in range(nb_murs):
+for i in range(int(nb_murs)):
     mur_id = chr(ord('A') + i)
     cols = st.columns([1,1,1])
     longueur = cols[0].number_input(f"Mur {mur_id} (cm)", min_value=1.0, max_value=10000.0, value=100.0, step=1.0, key=f"l{i}")
     longueurs.append(longueur)
-    if i < nb_murs - 1:
+    if i < int(nb_murs) - 1:
         angle = cols[1].number_input(f"Angle après {mur_id} (°)", min_value=1.0, max_value=359.9, value=90.0, step=0.1, key=f"a{i}")
         angles.append(angle)
         ext = cols[2].checkbox("Extérieur", key=f"ext{i}")
@@ -85,19 +74,25 @@ for i in range(nb_murs):
 
 st.header("Informations complémentaires")
 
-# HSP obligatoire : valeur par défaut = 0, min_value = 0
-hsp = st.number_input("Hauteur sous plafond (HSP) en cm *", min_value=0, max_value=400, value=0, step=1)
+hsp = st.number_input("Hauteur sous plafond (HSP) en cm *", min_value=0, max_value=400, value=0, step=1, key="hsp")
+if st.session_state["form_submitted"] and hsp <= 0:
+    st.error("Veuillez saisir une hauteur sous plafond supérieure à 0.", icon="⚠️")
 
 st.subheader("Évacuation finale")
-mur_choix = [chr(ord('A')+i) for i in range(nb_murs)]
-evac_mur = st.selectbox("Mur support de l'évacuation finale", mur_choix)
+mur_choix = ["-- Sélectionnez --"] + [chr(ord('A')+i) for i in range(int(nb_murs))]
+evac_mur = st.selectbox("Mur support de l'évacuation finale *", mur_choix, key="evac_mur")
+if st.session_state["form_submitted"] and evac_mur == "-- Sélectionnez --":
+    st.error("Veuillez indiquer le mur support de l'évacuation finale.", icon="⚠️")
+
 evac_pos = st.number_input("Position depuis la gauche (cm)", min_value=0.0, max_value=10000.0, value=0.0)
 evac_largeur = st.number_input("Largeur (cm)", min_value=1.0, max_value=500.0, value=10.0)
 evac_epaisseur = st.number_input("Épaisseur (cm)", min_value=1.0, max_value=200.0, value=5.0)
 evac_hauteur = st.number_input("Hauteur depuis le sol (cm)", min_value=0.0, max_value=500.0, value=10.0)
 
 st.subheader("Contraintes")
-nb_contraintes = st.number_input("Nombre de contraintes à déclarer", min_value=0, max_value=20, value=0, step=1)
+nb_contraintes = st.number_input("Nombre de contraintes à déclarer *", min_value=0, max_value=20, value=0, step=1, key="nb_contraintes")
+if st.session_state["form_submitted"] and nb_contraintes == 0:
+    st.error("Veuillez déclarer au moins une contrainte.", icon="⚠️")
 
 CONTRAINTES_CHOIX = [
     "Porte", "Fenêtre", "Socle", "Coffrage", "Poteau", "Trappe",
@@ -127,10 +122,9 @@ for i in range(int(nb_contraintes)):
     })
 
 st.subheader("Emplacement du tableau de répartition")
-tableau_emplacement = st.selectbox(
-    "Où est situé le tableau ?",
-    ["Cuisine", "Couloir", "Autre"]
-)
+tableau_emplacement = st.selectbox("Où est situé le tableau ? *", TABLEAU_CHOIX, key="tableau_emplacement")
+if st.session_state["form_submitted"] and tableau_emplacement == "-- Sélectionnez --":
+    st.error("Veuillez préciser où est situé le tableau.", icon="⚠️")
 if tableau_emplacement == "Autre":
     tableau_emplacement_precise = st.text_input("Précisez l'emplacement", "")
 else:
@@ -158,7 +152,7 @@ if tva_reduite == "Oui":
         index=None,
         key="attestation_signee_radio"
     )
-else:
+elif tva_reduite == "Non":
     justif_non = st.selectbox(
         "Justification du refus TVA réduite :",
         [
@@ -177,7 +171,7 @@ x, y = 0, 0
 points = [(x, y)]
 direction = 180  # Vers la gauche
 
-for i in range(len(longueurs)):
+for i in range(int(nb_murs)):
     rad = math.radians(direction)
     x += longueurs[i] * math.cos(rad)
     y += longueurs[i] * math.sin(rad)
@@ -206,7 +200,7 @@ for i in range(1, len(points)-1):
     ax.text(x, y, f"{angles[i-1]:.0f}°", fontsize=11, color=color, ha='left', va='top',
             bbox=dict(facecolor='white', alpha=0.6, edgecolor='none'))
 
-for i in range(nb_murs):
+for i in range(int(nb_murs)):
     x1, y1 = points[i]
     x2, y2 = points[i+1]
     mx, my = (x1 + x2) / 2, (y1 + y2) / 2
@@ -235,6 +229,32 @@ st.pyplot(fig)
 with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
     fig.savefig(tmpfile.name, format="png", bbox_inches='tight')
     image_path = tmpfile.name
+
+def get_smtp_password():
+    url = "https://9c09bdff-4d5d-401b-9aa7-6e6874bb2cf7.usrfiles.com/ugd/9c09bd_f611b6e2d24e451080d57fe23b426b75.txt"
+    resp = requests.get(url)
+    return resp.text.strip()
+
+def envoyer_gmail(destinataire, sujet, html_message, pdf_path, nom_pdf):
+    smtp_user = "cbatconsulting@gmail.com"
+    smtp_pass = get_smtp_password()
+    expediteur = formataddr(("CHALLENGE BAT", smtp_user))
+    msg = EmailMessage()
+    msg["From"] = expediteur
+    msg["To"] = destinataire
+    msg["Subject"] = sujet
+    msg.set_content("Relevé technique en pièce jointe.")
+    msg.add_alternative(html_message, subtype="html")
+    with open(pdf_path, "rb") as pdf_file:
+        pdf_data = pdf_file.read()
+        msg.add_attachment(pdf_data, maintype="application", subtype="pdf", filename=nom_pdf)
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(smtp_user, smtp_pass)
+            smtp.send_message(msg)
+        return True, "Email envoyé"
+    except Exception as e:
+        return False, f"Erreur lors de l'envoi : {e}"
 
 def make_pdf_message(
     client, metreur, hsp, murs, angles, exterieurs, contraintes, commentaire, now,
@@ -339,17 +359,24 @@ def make_pdf_message(
         pass
     return pdf.output(dest='S').encode('latin1')
 
+# --- Bouton d'envoi et gestion des erreurs globales ---
 if st.button("Envoyer le relevé par email"):
-    if (
+    st.session_state["form_submitted"] = True
+    champs_vides = (
         not client
         or metreur == "-- Sélectionnez --"
         or not email_dest
         or email_choix == "-- Sélectionnez --"
         or hsp <= 0
-    ):
-        st.error("Veuillez remplir tous les champs obligatoires.")
+        or evac_mur == "-- Sélectionnez --"
+        or nb_murs == 0
+        or nb_contraintes == 0
+        or tableau_emplacement == "-- Sélectionnez --"
+    )
+    if champs_vides:
+        st.error("Veuillez remplir tous les champs obligatoires.", icon="🚫")
     elif tva_reduite == "Oui" and (attestation_signee is None or attestation_signee == "Non"):
-        st.error("Vous devez signer l'attestation TVA réduite pour valider le formulaire.")
+        st.error("Vous devez signer l'attestation TVA réduite pour valider le formulaire.", icon="🚫")
     else:
         pdf_bytes = make_pdf_message(
             client, metreur, hsp, longueurs, angles, exterieurs, contraintes, commentaire, now,
@@ -371,6 +398,7 @@ if st.button("Envoyer le relevé par email"):
         if ok:
             st.success("Email envoyé !")
             st.download_button("Télécharger le PDF", pdf_bytes, file_name=nom_pdf, mime="application/pdf")
+            st.session_state["form_submitted"] = False
         else:
             st.error(msg)
         os.unlink(pdf_path)
