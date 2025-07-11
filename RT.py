@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1107.18"
+VERSION = "1107.20"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
 EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
@@ -49,18 +49,6 @@ if st.session_state["form_submitted"] and not client:
 metreur = st.selectbox("Sélectionnez votre prénom *", METREURS, key="metreur")
 if st.session_state["form_submitted"] and metreur == "-- Sélectionnez --":
     st.error("Veuillez sélectionner votre prénom.", icon="⚠️")
-
-email_choix = st.selectbox("Adresse email destinataire *", EMAILS, key="email_choix")
-if email_choix == "autre...":
-    email_dest = st.text_input("Saisissez une autre adresse email *", key="email_dest")
-    if st.session_state["form_submitted"] and not email_dest:
-        st.error("Veuillez renseigner une adresse email.", icon="⚠️")
-elif email_choix == "-- Sélectionnez --":
-    email_dest = ""
-    if st.session_state["form_submitted"]:
-        st.error("Veuillez choisir une adresse email.", icon="⚠️")
-else:
-    email_dest = email_choix
 
 now = datetime.datetime.now()
 date_str = now.strftime("%d-%m-%Y_%H-%M")
@@ -114,7 +102,7 @@ if st.session_state["form_submitted"] and nb_contraintes == 0:
 
 CONTRAINTES_CHOIX = [
     "Porte", "Fenêtre", "Socle", "Coffrage", "Poteau", "Trappe",
-    "VMC", "Gaz", "Interrupteur", "Faïence (Attention si HS < 92 cm)", "Autre (Préciser)"
+    "VMC", "Gaz", "Interrupteur", "Faïence (si HS < 92 cm)", "Plinthes (si épaisseur > 1 cm ET hauteur > 8 cm)", "Autre (Préciser)"
 ]
 contraintes = []
 for i in range(int(nb_contraintes)):
@@ -184,7 +172,6 @@ elif tva_reduite == "Non":
 commentaire = st.text_area("Commentaire (optionnel)", "")
 
 # ========== Générer le graphique du plan ==========
-
 x, y = 0, 0
 points = [(x, y)]
 direction = 180  # Vers la gauche
@@ -247,6 +234,20 @@ st.pyplot(fig)
 with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
     fig.savefig(tmpfile.name, format="png", bbox_inches='tight')
     image_path = tmpfile.name
+
+# ========== Adresse email et bouton envoyer EN BAS ==========
+st.subheader("Adresse email destinataire *")
+email_choix = st.selectbox("Sélectionnez l'adresse email", EMAILS, key="email_choix")
+if email_choix == "autre...":
+    email_dest = st.text_input("Saisissez une autre adresse email *", key="email_dest")
+    if st.session_state["form_submitted"] and not email_dest:
+        st.error("Veuillez renseigner une adresse email.", icon="⚠️")
+elif email_choix == "-- Sélectionnez --":
+    email_dest = ""
+    if st.session_state["form_submitted"]:
+        st.error("Veuillez choisir une adresse email.", icon="⚠️")
+else:
+    email_dest = email_choix
 
 def get_smtp_password():
     url = "https://9c09bdff-4d5d-401b-9aa7-6e6874bb2cf7.usrfiles.com/ugd/9c09bd_f611b6e2d24e451080d57fe23b426b75.txt"
@@ -350,7 +351,6 @@ def make_pdf_message(
     pdf.cell(0, 7, f"Cloisons à traverser : {tableau_cloisons}", ln=True)
     pdf.cell(0, 7, f"Place pour second coffret : {tableau_place_deux}", ln=True)
     pdf.ln(2)
-
     # ----------- AJOUT TVA REDUITE PDF -----------
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "TVA Réduite", ln=True)
@@ -363,7 +363,6 @@ def make_pdf_message(
         pdf.cell(0, 7, f"Justification : {justif_non}", ln=True)
     pdf.ln(2)
     # ----------- FIN AJOUT TVA REDUITE PDF -----------
-
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Commentaire", ln=True)
     pdf.set_font("Arial", "", 11)
