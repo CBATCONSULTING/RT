@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1107.25"
+VERSION = "1207.01"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
 EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "julie@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
@@ -72,7 +72,6 @@ valeur_terre = st.radio(
 )
 if st.session_state["form_submitted"] and not valeur_terre:
     st.error("Veuillez indiquer la valeur de la terre.", icon="⚠️")
-# ------------------------------------------------------------
 
 now = datetime.datetime.now()
 date_str = now.strftime("%d-%m-%Y_%H-%M")
@@ -161,10 +160,28 @@ else:
     tableau_emplacement_precise = ""
 
 tableau_developpe = st.number_input("Développé linéaire depuis le centre de la cuisine (mètres)", min_value=0.0, max_value=100.0, value=0.0, step=0.1)
-tableau_cloisons = st.radio("Y a-t-il des cloisons à traverser ?", ("Pas de retirage nécessaire" , "Non", "Oui"))
-tableau_place_deux = st.radio("Y a-t-il de la place pour un second coffret si nécessaire ?", ("Pas de retirage nécessaire" , "Non", "Oui"))
 
-# ----------- AJOUT TVA REDUITE ICI -----------
+# ----------- QUESTIONS MODIFIÉES ------------------
+tableau_cloisons = st.radio(
+    "Y a-t-il des cloisons à traverser ? *",
+    ("Non", "Oui"),
+    key="tableau_cloisons",
+    index=None
+)
+if st.session_state["form_submitted"] and tableau_cloisons is None:
+    st.error("Veuillez indiquer s'il y a des cloisons à traverser.", icon="⚠️")
+
+tableau_place_deux = st.radio(
+    "Y a-t-il de la place pour un second coffret si nécessaire ? *",
+    ("Non", "Oui"),
+    key="tableau_place_deux",
+    index=None
+)
+if st.session_state["form_submitted"] and tableau_place_deux is None:
+    st.error("Veuillez indiquer si la place pour un second coffret est nécessaire.", icon="⚠️")
+# --------------------------------------------------
+
+# --- TVA réduite, commentaire, etc ---
 st.subheader("TVA Réduite")
 st.markdown("<i>(logement plus de 2 ans)</i>", unsafe_allow_html=True)
 tva_reduite = st.radio("Le logement est-il éligible à la TVA réduite ?", ["Oui", "Non"])
@@ -186,13 +203,11 @@ elif tva_reduite == "Non":
     justif_non = st.selectbox(
         "Justification du refus TVA réduite :",
         [
-            "/",
             "Client absent",
             "Logement moins de 2 ans",
             "Entreprise"
         ]
     )
-# ----------- FIN AJOUT TVA REDUITE -----------
 
 commentaire = st.text_area("Commentaire (optionnel)", "")
 
@@ -416,6 +431,8 @@ if st.button("Envoyer le relevé par email"):
         or nb_murs == 0
         or nb_contraintes == 0
         or tableau_emplacement == "-- Sélectionnez --"
+        or tableau_cloisons is None
+        or tableau_place_deux is None
     )
     if champs_vides:
         st.error("Veuillez remplir tous les champs obligatoires.", icon="🚫")
