@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1207.01"
+VERSION = "1407.02"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
 EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "julie@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
@@ -51,18 +51,23 @@ if st.session_state["form_submitted"] and metreur == "-- Sélectionnez --":
     st.error("Veuillez sélectionner votre prénom.", icon="⚠️")
 
 # ------ Nouvelle question : Mesure valeur mise à la terre ------
-st.markdown("""
-<span style="font-size:1.1em; font-weight:600;">
-    Mesure valeur mise à la terre
-    <a href="https://www.challengebat.fr/valeur-mesure-terre" target="_blank" title="Lien vers explicatif"
-       style="vertical-align:middle; margin-left:6px; text-decoration:none;">
-        <span style="color:#22c55e; font-size:1.2em;">🔗</span>
-    </a>
-</span>
-<div style="color:#666; font-size:0.95em; margin-bottom:0.35em;">
-    Mesurer en 3 points différents
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div style="display:flex;align-items:center;margin:0.7em 0 0.4em 0;">
+        <span style="font-size:1.35em;font-weight:700;">
+            Mesure valeur mise à la terre
+        </span>
+        <a href="https://www.challengebat.fr/valeur-mesure-terre" target="_blank" title="Lien vers explicatif"
+           style="vertical-align:middle; margin-left:8px; text-decoration:none;">
+            <span style="color:#22c55e; font-size:1.25em;">🔗</span>
+        </a>
+    </div>
+    <div style="color:#666; font-size:0.95em; margin-bottom:0.35em;">
+        Mesurer en 3 points différents
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 valeur_terre = st.radio(
     "Mesure valeur mise à la terre (obligatoire)",
     ["Valeur ok", "Valeur pas ok"],
@@ -76,6 +81,32 @@ if st.session_state["form_submitted"] and not valeur_terre:
 now = datetime.datetime.now()
 date_str = now.strftime("%d-%m-%Y_%H-%M")
 nom_pdf = f"RT_{client or 'client'}_{date_str}.pdf"
+
+# ==== SOUS-TITRE AVEC LIEN (Section plan murs) ====
+st.markdown(
+    """
+    <div style="display:flex;align-items:center;margin:0.7em 0 0.4em 0;">
+        <span style="font-size:1.35em;font-weight:700;">Relevé Technique</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# -- LIGNE AIDE SOUS-TITRE EN GRAS
+st.markdown(
+    '''
+    <div style="font-weight:bold; font-size:1em; margin-top:-12px; margin-bottom:8px;">
+    Mesure angle sans rapporteur, cliquez ici :
+    <a href="https://cbatconsulting.github.io/ANGLE/" target="_blank" title="Lien vers explicatif"
+    style="vertical-align:middle; margin-left:2px; text-decoration:none;">
+    <span style="color:#22c55e; font-size:1.1em;">🔗</span>
+    </a>
+    </div>
+    ''',
+    unsafe_allow_html=True,
+)
+
+# ==== FIN SOUS-TITRE ====
 
 st.markdown("""
 - Départ en bas à droite, premier mur vers la gauche.
@@ -101,13 +132,13 @@ for i in range(int(nb_murs)):
         ext = cols[2].checkbox("Extérieur", key=f"ext{i}")
         exterieurs.append(ext)
 
-st.header("Informations complémentaires")
-
+# ---- Titres uniformisés pour toutes les sections ----
+st.markdown("#### Informations complémentaires")
 hsp = st.number_input("Hauteur sous plafond (HSP) en cm *", min_value=0, max_value=400, value=0, step=1, key="hsp")
 if st.session_state["form_submitted"] and hsp <= 0:
     st.error("Veuillez saisir une hauteur sous plafond supérieure à 0.", icon="⚠️")
 
-st.subheader("Évacuation finale")
+st.markdown("#### Évacuation finale")
 mur_choix = ["-- Sélectionnez --"] + [chr(ord('A')+i) for i in range(int(nb_murs))]
 evac_mur = st.selectbox("Mur support de l'évacuation finale *", mur_choix, key="evac_mur")
 if st.session_state["form_submitted"] and evac_mur == "-- Sélectionnez --":
@@ -118,7 +149,7 @@ evac_largeur = st.number_input("Largeur (cm)", min_value=1.0, max_value=500.0, v
 evac_epaisseur = st.number_input("Épaisseur (cm)", min_value=1.0, max_value=200.0, value=5.0)
 evac_hauteur = st.number_input("Hauteur depuis le sol (cm)", min_value=0.0, max_value=500.0, value=10.0)
 
-st.subheader("Contraintes")
+st.markdown("#### Contraintes")
 nb_contraintes = st.number_input("Nombre de contraintes à déclarer *", min_value=0, max_value=20, value=0, step=1, key="nb_contraintes")
 if st.session_state["form_submitted"] and nb_contraintes == 0:
     st.error("Veuillez déclarer au moins une contrainte.", icon="⚠️")
@@ -150,7 +181,7 @@ for i in range(int(nb_contraintes)):
         "haut": c_haut
     })
 
-st.subheader("Emplacement du tableau de répartition")
+st.markdown("#### Emplacement du tableau de répartition")
 tableau_emplacement = st.selectbox("Où est situé le tableau ? *", TABLEAU_CHOIX, key="tableau_emplacement")
 if st.session_state["form_submitted"] and tableau_emplacement == "-- Sélectionnez --":
     st.error("Veuillez préciser où est situé le tableau.", icon="⚠️")
@@ -181,8 +212,7 @@ if st.session_state["form_submitted"] and tableau_place_deux is None:
     st.error("Veuillez indiquer si la place pour un second coffret est nécessaire.", icon="⚠️")
 # --------------------------------------------------
 
-# --- TVA réduite, commentaire, etc ---
-st.subheader("TVA Réduite")
+st.markdown("#### TVA Réduite")
 st.markdown("<i>(logement plus de 2 ans)</i>", unsafe_allow_html=True)
 tva_reduite = st.radio("Le logement est-il éligible à la TVA réduite ?", ["Oui", "Non"])
 justif_non = ""
@@ -276,7 +306,7 @@ with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
     image_path = tmpfile.name
 
 # ========== Adresse email et bouton envoyer EN BAS ==========
-st.subheader("Adresse email destinataire *")
+st.markdown("#### Adresse email destinataire *")
 email_choix = st.selectbox("Sélectionnez l'adresse email", EMAILS, key="email_choix")
 if email_choix == "autre...":
     email_dest = st.text_input("Saisissez une autre adresse email *", key="email_dest")
