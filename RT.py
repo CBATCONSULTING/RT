@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 from fpdf import FPDF
 
-VERSION = "1407.02"
+VERSION = "1707.10"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
 EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "julie@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
@@ -77,6 +77,30 @@ valeur_terre = st.radio(
 )
 if st.session_state["form_submitted"] and not valeur_terre:
     st.error("Veuillez indiquer la valeur de la terre.", icon="⚠️")
+# --- Nouvelle question : Photos ---
+st.markdown("""
+<div style="margin-top:1.2em; font-size:1.35em; font-weight:700;">Photos</div>
+<div style="color:#666; font-size:0.95em; margin-bottom:0.35em;">
+    La photo du tableau de répartition devra être la plus nette possible, et le représenter en entier<br>
+    Si le réseau électrique est en chantier, prendre la photo du mesureur de terre au sol
+</div>
+""", unsafe_allow_html=True)
+
+photo_options = [
+    "Pièce entière",
+    "Pièce de gauche à droite",
+    "Regroupement plomberie",
+    "Évacuation finale",
+    "Tableau de répartition",
+    "Appareil mesure terre"
+]
+photos_checked = {}
+for opt in photo_options:
+    photos_checked[opt] = st.checkbox(opt, key=f"photo_{opt}")
+
+if st.session_state["form_submitted"] and not all(photos_checked.values()):
+    st.error("Veuillez cocher toutes les options de photo.", icon="⚠️")
+
 
 now = datetime.datetime.now()
 date_str = now.strftime("%d-%m-%Y_%H-%M")
@@ -214,9 +238,10 @@ if st.session_state["form_submitted"] and tableau_place_deux is None:
 
 st.markdown("#### TVA Réduite")
 st.markdown("<i>(logement plus de 2 ans)</i>", unsafe_allow_html=True)
+
+
 tva_reduite = st.radio("Le logement est-il éligible à la TVA réduite ?", ["Oui", "Non"])
-justif_non = ""
-attestation_signee = None
+
 if tva_reduite == "Oui":
     st.success("Remplir l'attestation sur l'honneur TVA réduite ici :")
     st.markdown(
@@ -226,10 +251,27 @@ if tva_reduite == "Oui":
     attestation_signee = st.radio(
         "Attestation signée",
         options=["Oui", "Non"],
-        index=None,
         key="attestation_signee_radio"
     )
-elif tva_reduite == "Non":
+
+    if attestation_signee == "Non":
+        raison_non_signature = st.selectbox(
+            "Raison *",
+            ["-- Sélectionnez --", "Client absent", "Problème informatique", "Autre"],
+            key="raison_non_signature"
+        )
+        if raison_non_signature == "Autre":
+            raison_autre_detail = st.text_input("Précisez la raison")
+        else:
+            raison_autre_detail = ""
+    else:
+        raison_non_signature = None
+        raison_autre_detail = ""
+    justif_non = ""
+else:
+    attestation_signee = None
+    raison_non_signature = ""
+    raison_autre_detail = ""
     justif_non = st.selectbox(
         "Justification du refus TVA réduite :",
         [
@@ -345,6 +387,21 @@ def envoyer_gmail(destinataire, sujet, html_message, pdf_path, nom_pdf):
     except Exception as e:
         return False, f"Erreur lors de l'envoi : {e}"
 
+import streamlit as st
+import matplotlib.pyplot as plt
+import math
+import datetime
+import tempfile
+import os
+import requests
+import smtplib
+from email.message import EmailMessage
+from email.utils import formataddr
+from fpdf import FPDF
+
+# ... contenu du formulaire ...
+
+# Fonction mise à jour
 def make_pdf_message(
     client, metreur, hsp, murs, angles, exterieurs, contraintes, commentaire, now,
     evac_mur, evac_pos, evac_largeur, evac_epaisseur, evac_hauteur,
@@ -354,7 +411,6 @@ def make_pdf_message(
 ):
     pdf = FPDF()
     pdf.add_page()
-    # Logo
     try:
         pdf.image(LOGO_URL, x=80, w=50)
         pdf.ln(2)
@@ -371,7 +427,6 @@ def make_pdf_message(
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(2)
 
-    # --- Bloc Identité ---
     pdf.set_font("Arial", "B", 13)
     pdf.cell(0, 10, "Informations du relevé", ln=True)
     pdf.set_font("Arial", "", 11)
@@ -380,6 +435,7 @@ def make_pdf_message(
     pdf.cell(0, 8, f"Adresse email destinataire : {email_dest}", ln=True)
     pdf.cell(0, 8, f"Date : {now.strftime('%d/%m/%Y à %Hh%M')}", ln=True)
     pdf.ln(3)
+
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Résumé des murs", ln=True)
     pdf.set_font("Arial", "", 11)
@@ -389,17 +445,20 @@ def make_pdf_message(
         murs_text.append(f"Mur {chr(65+i)} : {l:.0f} cm, angle intérieur {a}°")
     pdf.multi_cell(0, 7, "\n".join(murs_text))
     pdf.ln(2)
+
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Hauteur sous plafond (HSP)", ln=True)
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 7, f"{hsp} cm", ln=True)
     pdf.ln(2)
+
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Évacuation finale", ln=True)
     pdf.set_font("Arial", "", 11)
     pdf.multi_cell(0, 7, f"Mur : {evac_mur}, Position gauche : {evac_pos} cm, Largeur : {evac_largeur} cm, "
                    f"Épaisseur : {evac_epaisseur} cm, Hauteur sol : {evac_hauteur} cm")
     pdf.ln(2)
+
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Contraintes", ln=True)
     pdf.set_font("Arial", "", 11)
@@ -415,6 +474,7 @@ def make_pdf_message(
     else:
         pdf.cell(0, 7, "Aucune contrainte renseignée.", ln=True)
     pdf.ln(2)
+
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Emplacement du tableau de répartition", ln=True)
     pdf.set_font("Arial", "", 11)
@@ -423,32 +483,50 @@ def make_pdf_message(
     pdf.cell(0, 7, f"Cloisons à traverser : {tableau_cloisons}", ln=True)
     pdf.cell(0, 7, f"Place pour second coffret : {tableau_place_deux}", ln=True)
     pdf.ln(2)
-    # ----------- AJOUT TVA REDUITE PDF -----------
+
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "TVA Réduite", ln=True)
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 7, f"Eligibilité : {tva_reduite}", ln=True)
     if tva_reduite == "Oui":
-        pdf.cell(0, 7, "Lien attestation : https://www.challengebat.fr/tva-reduite", ln=True)
         pdf.cell(0, 7, f"Attestation signée : {attestation_signee}", ln=True)
+        if attestation_signee == "Non" and raison_non_signature:
+            if raison_non_signature == "Autre" and raison_autre_detail:
+                pdf.cell(0, 7, f"Raison : Autre - {raison_autre_detail}", ln=True)
+            elif raison_non_signature != "Autre":
+                pdf.cell(0, 7, f"Raison : {raison_non_signature}", ln=True)
     else:
         pdf.cell(0, 7, f"Justification : {justif_non}", ln=True)
     pdf.ln(2)
-    # ----------- FIN AJOUT TVA REDUITE PDF -----------
+
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Commentaire", ln=True)
     pdf.set_font("Arial", "", 11)
     pdf.multi_cell(0, 7, commentaire or "-")
     pdf.ln(3)
+
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, "Schéma du relevé technique", ln=True)
     try:
         pdf.image(image_path, x=20, w=170)
     except Exception:
         pass
+
     return pdf.output(dest='S').encode('latin1')
 
+
 if st.button("Envoyer le relevé par email"):
+    
+    if tva_reduite == "Oui" and (
+        attestation_signee is None or
+        (attestation_signee == "Non" and (
+            not raison_non_signature or raison_non_signature == "-- Sélectionnez --" or
+            (raison_non_signature == "Autre" and not raison_autre_detail)
+        ))
+    ):
+        st.error("Veuillez soit signer l'attestation TVA réduite, soit indiquer une raison valable (ou préciser 'Autre').", icon="🚫")
+
+
     st.session_state["form_submitted"] = True
     champs_vides = (
         not client
@@ -466,8 +544,6 @@ if st.button("Envoyer le relevé par email"):
     )
     if champs_vides:
         st.error("Veuillez remplir tous les champs obligatoires.", icon="🚫")
-    elif tva_reduite == "Oui" and (attestation_signee is None or attestation_signee == "Non"):
-        st.error("Vous devez signer l'attestation TVA réduite pour valider le formulaire.", icon="🚫")
     else:
         pdf_bytes = make_pdf_message(
             client, metreur, hsp, longueurs, angles, exterieurs, contraintes, commentaire, now,
