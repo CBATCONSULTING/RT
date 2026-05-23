@@ -15,7 +15,7 @@ try:
 except Exception:
     Image = None
 
-VERSION = "V2.5"
+VERSION = "V2.6"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Maxime", "Mohamed", "Autre prénom à saisir"]
 SUPPORT_EMAIL = "support@challengebat.fr"
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
@@ -342,7 +342,7 @@ client = st.text_input("Nom du client *", value="", key="client")
 st.caption("Si le prénom n’est pas dans la liste, cochez ‘Autre prénom à saisir’, puis tapez-le dans le champ qui apparaît.")
 metreur = st.radio("Sélectionnez votre prénom *", METREURS, key="metreur", horizontal=False)
 if metreur == "Autre prénom à saisir":
-    metreur_autre = st.text_input("Prénom du métreur *", key="metreur_autre", placeholder="Ex : LouLou")
+    metreur_autre = st.text_input("Prénom du métreur *", key="metreur_autre", placeholder="Prénom")
     metreur_final = metreur_autre.strip()
 else:
     metreur_autre = ""
@@ -541,18 +541,11 @@ if cc_maxime:
 if cc_mohamed:
     email_cc_list.append("mohamed@challengebat.fr")
 
-cc_autre_nom = ""
 cc_autre_email = ""
 if cc_autre:
-    default_nom_autre = metreur_final if metreur == "Autre prénom à saisir" else ""
-    cc_autre_nom = st.text_input(
-        "Prénom du technicien à mettre en copie *",
-        value=default_nom_autre,
-        key="cc_autre_nom",
-        placeholder="Ex : LouLou",
-    ).strip()
+    libelle_email_autre = f"Adresse email de {metreur_final} *" if metreur_final and metreur_final != "-- Sélectionnez --" else "Adresse email du technicien à mettre en copie *"
     cc_autre_email = st.text_input(
-        f"Adresse email de {cc_autre_nom or 'l’autre technicien'} *",
+        libelle_email_autre,
         key="cc_autre_email",
         placeholder="prenom@challengebat.fr",
     ).strip()
@@ -587,7 +580,7 @@ nom_pdf = f"RT_{client or 'client'}_{date_str}.pdf"
 if st.button("Envoyer le relevé par email", type="primary"):
     st.session_state["form_submitted"] = True
 
-    cc_autre_incomplet = cc_autre and (not cc_autre_nom or not cc_autre_email or "@" not in cc_autre_email)
+    cc_autre_incomplet = cc_autre and (not cc_autre_email or "@" not in cc_autre_email)
 
     champs_vides = (
         not client
@@ -615,7 +608,7 @@ if st.button("Envoyer le relevé par email", type="primary"):
     elif champs_vides:
         st.error("Veuillez remplir tous les champs obligatoires.", icon="🚫")
     elif cc_autre_incomplet:
-        st.error("Veuillez renseigner le prénom et l’adresse email de l’autre technicien à mettre en copie.", icon="🚫")
+        st.error("Veuillez renseigner l’adresse email de l’autre technicien à mettre en copie.", icon="🚫")
     else:
         evac = {
             "mur": evac_mur,
