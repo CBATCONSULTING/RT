@@ -15,9 +15,9 @@ try:
 except Exception:
     Image = None
 
-VERSION = "V2.3"
-METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Maxime", "Mohamed"]
-EMAILS = ["support@challengebat.fr", "autre..."]
+VERSION = "V2.4"
+METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Maxime", "Mohamed", "Autre..."]
+EMAILS = ["support@challengebat.fr", "Autre adresse à saisir..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
 LOGO_URL = "https://static.wixstatic.com/media/9c09bd_194e3777ea134f9a99bc086cb7173909~mv2.png"
 SMTP_USER = "cbatconsulting@gmail.com"
@@ -340,6 +340,12 @@ st.info("Méthode terrain : relevez chaque mur de gauche à droite au télémèt
 st.markdown("## 1. Informations du relevé")
 client = st.text_input("Nom du client *", value="", key="client")
 metreur = st.selectbox("Sélectionnez votre prénom *", METREURS, key="metreur")
+if metreur == "Autre...":
+    metreur_autre = st.text_input("Saisissez le prénom du métreur *", key="metreur_autre")
+    metreur_final = metreur_autre.strip()
+else:
+    metreur_autre = ""
+    metreur_final = metreur
 type_piece = st.selectbox(
     "Configuration de la pièce *",
     ["-- Sélectionnez --", "1 mur linéaire", "2 murs en L", "3 murs en U", "4 murs", "Pièce irrégulière / autre"],
@@ -522,7 +528,7 @@ commentaire = st.text_area("Commentaire général", "")
 st.markdown("## 8. Envoi")
 st.caption("Par défaut, le relevé est envoyé à support@challengebat.fr. Vous pouvez choisir une autre adresse si besoin.")
 email_choix = st.selectbox("Adresse email destinataire *", EMAILS, index=0, key="email_choix")
-if email_choix == "autre...":
+if email_choix == "Autre adresse à saisir...":
     email_dest = st.text_input("Saisissez une autre adresse email *", key="email_dest")
 else:
     email_dest = email_choix
@@ -565,7 +571,7 @@ if st.button("Envoyer le relevé par email", type="primary"):
 
     champs_vides = (
         not client
-        or metreur == "-- Sélectionnez --"
+        or metreur_final == "-- Sélectionnez --" or not metreur_final
         or type_piece == "-- Sélectionnez --"
         or not email_dest
         or hsp <= 0
@@ -600,7 +606,7 @@ if st.button("Envoyer le relevé par email", type="primary"):
         data = {
             "now": now,
             "client": client,
-            "metreur": metreur,
+            "metreur": metreur_final,
             "type_piece": type_piece,
             "email_dest": email_dest,
             "email_cc": email_cc,
@@ -633,7 +639,7 @@ if st.button("Envoyer le relevé par email", type="primary"):
         html_message = f"""
         <p>Bonjour,<br>Relevé technique en pièce jointe.<br>
         <b>Nom du client :</b> {client}<br>
-        <b>Métreur :</b> {metreur}<br>
+        <b>Métreur :</b> {metreur_final}<br>
         <b>Version :</b> {VERSION}<br>
         <b>Copie :</b> {email_cc or "-"}</p>
         """
