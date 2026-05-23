@@ -15,9 +15,9 @@ try:
 except Exception:
     Image = None
 
-VERSION = "V2.2"
+VERSION = "V2.3"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Maxime", "Mohamed"]
-EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "julie@challengebat.fr", "autre..."]
+EMAILS = ["support@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
 LOGO_URL = "https://static.wixstatic.com/media/9c09bd_194e3777ea134f9a99bc086cb7173909~mv2.png"
 SMTP_USER = "cbatconsulting@gmail.com"
@@ -66,12 +66,14 @@ def get_smtp_password():
     return resp.text.strip()
 
 
-def envoyer_gmail(destinataire, sujet, html_message, pdf_path, nom_pdf):
+def envoyer_gmail(destinataire, sujet, html_message, pdf_path, nom_pdf, cc=None):
     smtp_pass = get_smtp_password()
     expediteur = formataddr(("CHALLENGE BAT", SMTP_USER))
     msg = EmailMessage()
     msg["From"] = expediteur
     msg["To"] = destinataire
+    if cc:
+        msg["Cc"] = cc
     msg["Subject"] = sujet
     msg.set_content("Releve technique en piece jointe.")
     msg.add_alternative(html_message, subtype="html")
@@ -207,7 +209,7 @@ def make_pdf_message(data, image_path, photo_paths):
     pdf.set_font("Arial", "B", 16)
     pdf.cell(0, 10, clean_pdf_text("RELEVÉ TECHNIQUE CUISINE"), ln=True, align="C")
     pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 7, clean_pdf_text(f"Challenge BAT - {data['now'].strftime('%d/%m/%Y à %Hh%M')} - V{VERSION}"), ln=True, align="C")
+    pdf.cell(0, 7, clean_pdf_text(f"Challenge BAT - {data['now'].strftime('%d/%m/%Y à %Hh%M')} - {VERSION}"), ln=True, align="C")
     pdf.ln(3)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(4)
@@ -216,6 +218,8 @@ def make_pdf_message(data, image_path, photo_paths):
     pdf_cell(pdf, 6, f"Client : {data['client']}")
     pdf_cell(pdf, 6, f"Métreur : {data['metreur']}")
     pdf_cell(pdf, 6, f"Destinataire : {data['email_dest']}")
+    if data.get('email_cc'):
+        pdf_cell(pdf, 6, f"Copie : {data['email_cc']}")
     pdf_cell(pdf, 6, f"Type de pièce : {data['type_piece']}")
     pdf_cell(pdf, 6, f"Hauteur sous plafond : {data['hsp']} cm")
     pdf_cell(pdf, 6, f"Terre : {data['valeur_terre']}")
@@ -516,13 +520,22 @@ commentaire = st.text_area("Commentaire général", "")
 
 # Étape 8
 st.markdown("## 8. Envoi")
-email_choix = st.selectbox("Adresse email destinataire *", EMAILS, key="email_choix")
+st.caption("Par défaut, le relevé est envoyé à support@challengebat.fr. Vous pouvez choisir une autre adresse si besoin.")
+email_choix = st.selectbox("Adresse email destinataire *", EMAILS, index=0, key="email_choix")
 if email_choix == "autre...":
     email_dest = st.text_input("Saisissez une autre adresse email *", key="email_dest")
-elif email_choix == "-- Sélectionnez --":
-    email_dest = ""
 else:
     email_dest = email_choix
+
+st.markdown("**Mettre en copie**")
+cc_maxime = st.checkbox("Maxime — maxime@challengebat.fr", key="cc_maxime")
+cc_mohamed = st.checkbox("Mohamed — mohamed@challengebat.fr", key="cc_mohamed")
+email_cc_list = []
+if cc_maxime:
+    email_cc_list.append("maxime@challengebat.fr")
+if cc_mohamed:
+    email_cc_list.append("mohamed@challengebat.fr")
+email_cc = ", ".join(email_cc_list)
 
 # Alertes automatiques
 alertes = []
@@ -555,7 +568,6 @@ if st.button("Envoyer le relevé par email", type="primary"):
         or metreur == "-- Sélectionnez --"
         or type_piece == "-- Sélectionnez --"
         or not email_dest
-        or email_choix == "-- Sélectionnez --"
         or hsp <= 0
         or not valeur_terre
         or evac_mur == "-- Sélectionnez --"
@@ -591,6 +603,7 @@ if st.button("Envoyer le relevé par email", type="primary"):
             "metreur": metreur,
             "type_piece": type_piece,
             "email_dest": email_dest,
+            "email_cc": email_cc,
             "hsp": hsp,
             "valeur_terre": valeur_terre,
             "longueurs": longueurs,
@@ -621,9 +634,10 @@ if st.button("Envoyer le relevé par email", type="primary"):
         <p>Bonjour,<br>Relevé technique en pièce jointe.<br>
         <b>Nom du client :</b> {client}<br>
         <b>Métreur :</b> {metreur}<br>
-        <b>Version :</b> {VERSION}</p>
+        <b>Version :</b> {VERSION}<br>
+        <b>Copie :</b> {email_cc or "-"}</p>
         """
-        ok, msg = envoyer_gmail(email_dest, sujet, html_message, pdf_path, nom_pdf)
+        ok, msg = envoyer_gmail(email_dest, sujet, html_message, pdf_path, nom_pdf, cc=email_cc)
         if ok:
             st.success("Email envoyé !")
             st.download_button("Télécharger le PDF", pdf_bytes, file_name=nom_pdf, mime="application/pdf")
