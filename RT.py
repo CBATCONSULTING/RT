@@ -15,9 +15,9 @@ try:
 except Exception:
     Image = None
 
-VERSION = "V2.4"
-METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Maxime", "Mohamed", "Autre..."]
-EMAILS = ["support@challengebat.fr", "Autre adresse à saisir..."]
+VERSION = "V2.5"
+METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Maxime", "Mohamed", "Autre prénom à saisir"]
+SUPPORT_EMAIL = "support@challengebat.fr"
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
 LOGO_URL = "https://static.wixstatic.com/media/9c09bd_194e3777ea134f9a99bc086cb7173909~mv2.png"
 SMTP_USER = "cbatconsulting@gmail.com"
@@ -339,9 +339,10 @@ st.info("Méthode terrain : relevez chaque mur de gauche à droite au télémèt
 # Étape 1
 st.markdown("## 1. Informations du relevé")
 client = st.text_input("Nom du client *", value="", key="client")
-metreur = st.selectbox("Sélectionnez votre prénom *", METREURS, key="metreur")
-if metreur == "Autre...":
-    metreur_autre = st.text_input("Saisissez le prénom du métreur *", key="metreur_autre")
+st.caption("Si le prénom n’est pas dans la liste, cochez ‘Autre prénom à saisir’, puis tapez-le dans le champ qui apparaît.")
+metreur = st.radio("Sélectionnez votre prénom *", METREURS, key="metreur", horizontal=False)
+if metreur == "Autre prénom à saisir":
+    metreur_autre = st.text_input("Prénom du métreur *", key="metreur_autre", placeholder="Ex : LouLou")
     metreur_final = metreur_autre.strip()
 else:
     metreur_autre = ""
@@ -526,21 +527,38 @@ commentaire = st.text_area("Commentaire général", "")
 
 # Étape 8
 st.markdown("## 8. Envoi")
-st.caption("Par défaut, le relevé est envoyé à support@challengebat.fr. Vous pouvez choisir une autre adresse si besoin.")
-email_choix = st.selectbox("Adresse email destinataire *", EMAILS, index=0, key="email_choix")
-if email_choix == "Autre adresse à saisir...":
-    email_dest = st.text_input("Saisissez une autre adresse email *", key="email_dest")
-else:
-    email_dest = email_choix
+st.info(f"Le relevé sera envoyé par défaut à **{SUPPORT_EMAIL}**.")
+email_dest = SUPPORT_EMAIL
 
 st.markdown("**Mettre en copie**")
 cc_maxime = st.checkbox("Maxime — maxime@challengebat.fr", key="cc_maxime")
 cc_mohamed = st.checkbox("Mohamed — mohamed@challengebat.fr", key="cc_mohamed")
+cc_autre = st.checkbox("Autre technicien / autre adresse à saisir", key="cc_autre")
+
 email_cc_list = []
 if cc_maxime:
     email_cc_list.append("maxime@challengebat.fr")
 if cc_mohamed:
     email_cc_list.append("mohamed@challengebat.fr")
+
+cc_autre_nom = ""
+cc_autre_email = ""
+if cc_autre:
+    default_nom_autre = metreur_final if metreur == "Autre prénom à saisir" else ""
+    cc_autre_nom = st.text_input(
+        "Prénom du technicien à mettre en copie *",
+        value=default_nom_autre,
+        key="cc_autre_nom",
+        placeholder="Ex : LouLou",
+    ).strip()
+    cc_autre_email = st.text_input(
+        f"Adresse email de {cc_autre_nom or 'l’autre technicien'} *",
+        key="cc_autre_email",
+        placeholder="prenom@challengebat.fr",
+    ).strip()
+    if cc_autre_email:
+        email_cc_list.append(cc_autre_email)
+
 email_cc = ", ".join(email_cc_list)
 
 # Alertes automatiques
@@ -569,6 +587,8 @@ nom_pdf = f"RT_{client or 'client'}_{date_str}.pdf"
 if st.button("Envoyer le relevé par email", type="primary"):
     st.session_state["form_submitted"] = True
 
+    cc_autre_incomplet = cc_autre and (not cc_autre_nom or not cc_autre_email or "@" not in cc_autre_email)
+
     champs_vides = (
         not client
         or metreur_final == "-- Sélectionnez --" or not metreur_final
@@ -594,6 +614,8 @@ if st.button("Envoyer le relevé par email", type="primary"):
         st.error("Veuillez soit signer l'attestation TVA réduite, soit indiquer une raison valable.", icon="🚫")
     elif champs_vides:
         st.error("Veuillez remplir tous les champs obligatoires.", icon="🚫")
+    elif cc_autre_incomplet:
+        st.error("Veuillez renseigner le prénom et l’adresse email de l’autre technicien à mettre en copie.", icon="🚫")
     else:
         evac = {
             "mur": evac_mur,
