@@ -15,9 +15,9 @@ try:
 except Exception:
     Image = None
 
-VERSION = "1800.00-v2-guidage-murs"
-METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "El-Hossein", "Maxime"]
-EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "pv@challengebat.fr", "maxime@challengebat.fr", "autre..."]
+VERSION = "1800.01-v2-guidage-murs"
+METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
+EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "julie@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
 LOGO_URL = "https://static.wixstatic.com/media/9c09bd_194e3777ea134f9a99bc086cb7173909~mv2.png"
 SMTP_USER = "cbatconsulting@gmail.com"
@@ -131,29 +131,58 @@ def render_plan(longueurs, angles, exterieurs):
     x_coords, y_coords = zip(*points)
     ax.plot(x_coords, y_coords, marker='o', linewidth=2)
 
+    # Etiquettes séparées volontairement :
+    # - la cote du mur est placée au-dessus du segment
+    # - la lettre du mur est placée en dessous
+    # Les décalages sont exprimés en points d'affichage, pas en cm,
+    # donc ils restent lisibles même sur de grandes pièces ou des murs courts.
     for i in range(1, len(points)):
         x1, y1 = points[i-1]
         x2, y2 = points[i]
         mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-        ax.text(mx, my, f"{longueurs[i-1]:.0f} cm", fontsize=11, ha='center', va='bottom',
-                bbox=dict(facecolor='white', alpha=0.75, edgecolor='none'))
+        ax.annotate(
+            f"{longueurs[i-1]:.0f} cm",
+            (mx, my),
+            textcoords="offset points",
+            xytext=(0, 16),
+            fontsize=11,
+            ha='center',
+            va='center',
+            bbox=dict(facecolor='white', alpha=0.9, edgecolor='none', pad=2.5),
+            zorder=4,
+        )
 
     for i in range(1, len(points)-1):
         x0, y0 = points[i]
         angle_type = "ext" if exterieurs[i-1] else "int"
-        ax.text(x0, y0, f"{angles[i-1]:.0f}° {angle_type}", fontsize=10, ha='left', va='top',
-                bbox=dict(facecolor='white', alpha=0.75, edgecolor='none'))
+        ax.annotate(
+            f"{angles[i-1]:.0f}° {angle_type}",
+            (x0, y0),
+            textcoords="offset points",
+            xytext=(10, -10),
+            fontsize=9,
+            ha='left',
+            va='center',
+            bbox=dict(facecolor='white', alpha=0.9, edgecolor='none', pad=2.0),
+            zorder=4,
+        )
 
     for i in range(len(longueurs)):
         x1, y1 = points[i]
         x2, y2 = points[i+1]
         mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-        dx = x2 - x1
-        dy = y2 - y1
-        norm = math.hypot(dx, dy)
-        perp_x, perp_y = (-dy / norm, dx / norm) if norm else (0, 0)
-        ax.text(mx + perp_x * 8, my + perp_y * 8, chr(ord('A')+i), fontsize=16, fontweight='bold',
-                ha='center', va='center', bbox=dict(facecolor='white', alpha=0.75, edgecolor='none'))
+        ax.annotate(
+            chr(ord('A')+i),
+            (mx, my),
+            textcoords="offset points",
+            xytext=(0, -20),
+            fontsize=16,
+            fontweight='bold',
+            ha='center',
+            va='center',
+            bbox=dict(facecolor='white', alpha=0.95, edgecolor='none', pad=2.5),
+            zorder=5,
+        )
 
     ax.scatter(points[0][0], points[0][1], s=120, zorder=5)
     ax.text(points[0][0], points[0][1], "Départ", fontsize=12, va='bottom', ha='right')
