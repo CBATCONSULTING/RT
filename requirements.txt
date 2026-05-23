@@ -3,3 +3,4 @@ matplotlib
 fpdf
 pillow
 requests
+streamlit-image-coordinates
