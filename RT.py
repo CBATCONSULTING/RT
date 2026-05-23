@@ -15,8 +15,8 @@ try:
 except Exception:
     Image = None
 
-VERSION = "1800.01-v2-guidage-murs"
-METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Julie", "Paul"]
+VERSION = "V2.2"
+METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Maxime", "Mohamed"]
 EMAILS = ["-- Sélectionnez --", "support@challengebat.fr", "stevens@challengebat.fr", "julie@challengebat.fr", "autre..."]
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
 LOGO_URL = "https://static.wixstatic.com/media/9c09bd_194e3777ea134f9a99bc086cb7173909~mv2.png"
