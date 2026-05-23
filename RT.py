@@ -11,11 +11,18 @@ from email.utils import formataddr
 from fpdf import FPDF
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageDraw, ImageFont
 except Exception:
     Image = None
+    ImageDraw = None
+    ImageFont = None
 
-VERSION = "V2.6"
+try:
+    from streamlit_image_coordinates import streamlit_image_coordinates
+except Exception:
+    streamlit_image_coordinates = None
+
+VERSION = "V2.7"
 METREURS = ["-- Sélectionnez --", "Jean-Baptiste", "Maxime", "Mohamed", "Autre prénom à saisir"]
 SUPPORT_EMAIL = "support@challengebat.fr"
 TABLEAU_CHOIX = ["-- Sélectionnez --", "Cuisine", "Couloir", "Autre"]
@@ -195,6 +202,178 @@ def render_plan(longueurs, angles, exterieurs):
     return fig
 
 
+
+def euclidean_distance(p1, p2):
+    return math.hypot(float(p2["x"]) - float(p1["x"]), float(p2["y"]) - float(p1["y"]))
+
+
+def round_cm(value):
+    try:
+        return round(float(value), 1)
+    except Exception:
+        return 0.0
+
+
+def draw_measure_points(display_img, points, labels=None):
+    """Retourne une copie annotée de l'image affichée."""
+    if Image is None or ImageDraw is None:
+        return display_img
+    img = display_img.copy().convert("RGB")
+    draw = ImageDraw.Draw(img)
+    labels = labels or []
+    # Couleurs volontairement simples, la lisibilité prime.
+    for idx, pt in enumerate(points):
+        x, y = int(pt["x"]), int(pt["y"])
+        r = 7
+        draw.ellipse((x-r, y-r, x+r, y+r), fill=(255, 0, 0), outline=(255, 255, 255), width=2)
+        txt = str(idx + 1)
+        if idx < len(labels):
+            txt = f"{idx + 1}"
+        draw.rectangle((x+9, y-11, x+31, y+11), fill=(255, 255, 255), outline=(255, 0, 0))
+        draw.text((x+14, y-8), txt, fill=(0, 0, 0))
+    return img
+
+
+def save_pil_temp_jpg(img, suffix=".jpg"):
+    if Image is None or img is None:
+        return None
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp.close()
+    img.convert("RGB").save(tmp.name, "JPEG", quality=88)
+    return tmp.name
+
+
+def photo_measurement_assistant(uploaded_file, prefix):
+    """
+    Petit module de mesure assistée par clics.
+    Hypothèse volontairement simple : photo prise le plus possible de face.
+    Les distances sont estimées à partir d'un repère connu visible sur la photo.
+    """
+    result = {
+        "complete": False,
+        "known_cm": 0.0,
+        "scale_px_per_cm": 0.0,
+        "pos": 0.0,
+        "larg": 0.0,
+        "haut_sol": 0.0,
+        "haut": 0.0,
+        "annotated_path": None,
+        "points_count": 0,
+    }
+
+    if uploaded_file is None:
+        st.info("Ajoutez une photo pour activer le repérage assisté.")
+        return result
+
+    if Image is None:
+        st.warning("Le module image n'est pas disponible. Vérifiez que Pillow est bien installé.")
+        return result
+
+    if streamlit_image_coordinates is None:
+        st.warning("Le module de clic sur image n'est pas disponible. Vérifiez que `streamlit-image-coordinates` est bien présent dans requirements.txt.")
+        return result
+
+    st.markdown("##### Repérage assisté sur photo")
+    st.caption("Prenez la photo le plus possible de face. Le calcul reste une aide terrain : le technicien peut corriger ensuite si besoin.")
+
+    ref_type = st.selectbox(
+        "Repère utilisé pour l'échelle",
+        ["Feuille A4 - grand côté 29,7 cm", "Feuille A4 - petit côté 21 cm", "Mètre / distance connue", "Autre distance connue"],
+        key=f"{prefix}_ref_type",
+    )
+    default_known = 29.7
+    if "petit côté" in ref_type:
+        default_known = 21.0
+    elif "Mètre" in ref_type:
+        default_known = 100.0
+    known_cm = st.number_input(
+        "Longueur réelle du repère visible (cm)",
+        min_value=1.0,
+        max_value=1000.0,
+        value=float(default_known),
+        step=0.1,
+        key=f"{prefix}_known_cm",
+    )
+    result["known_cm"] = known_cm
+
+    steps = [
+        "Début du repère connu",
+        "Fin du repère connu",
+        "Bord gauche du mur / origine 0",
+        "Bord gauche de la contrainte",
+        "Bord droit de la contrainte",
+        "Niveau du sol",
+        "Bas de la contrainte",
+        "Haut de la contrainte",
+    ]
+
+    points_key = f"{prefix}_measure_points"
+    last_key = f"{prefix}_last_click"
+    if points_key not in st.session_state:
+        st.session_state[points_key] = []
+    if last_key not in st.session_state:
+        st.session_state[last_key] = None
+
+    cols_reset = st.columns([1, 2])
+    if cols_reset[0].button("Réinitialiser les points", key=f"{prefix}_reset_points"):
+        st.session_state[points_key] = []
+        st.session_state[last_key] = None
+        st.rerun()
+
+    points = st.session_state[points_key]
+    result["points_count"] = len(points)
+    if len(points) < len(steps):
+        st.info(f"Cliquez le point {len(points)+1}/8 : {steps[len(points)]}")
+    else:
+        st.success("Tous les points nécessaires sont placés.")
+
+    try:
+        uploaded_file.seek(0)
+        img = Image.open(uploaded_file).convert("RGB")
+    except Exception:
+        st.warning("Impossible de lire cette photo.")
+        return result
+
+    display_img = img.copy()
+    display_img.thumbnail((760, 760))
+    annotated = draw_measure_points(display_img, points, steps)
+
+    coords = streamlit_image_coordinates(annotated, key=f"{prefix}_coords")
+    if coords and len(points) < len(steps):
+        click = {"x": int(coords["x"]), "y": int(coords["y"])}
+        if click != st.session_state[last_key]:
+            points.append(click)
+            st.session_state[points_key] = points
+            st.session_state[last_key] = click
+            st.rerun()
+
+    if points:
+        st.caption("Points posés : " + " | ".join([f"{i+1}. {steps[i]}" for i in range(len(points))]))
+
+    if len(points) >= 2:
+        ref_px = euclidean_distance(points[0], points[1])
+        if ref_px > 0 and known_cm > 0:
+            scale = ref_px / known_cm
+            result["scale_px_per_cm"] = scale
+            st.caption(f"Échelle calculée : {scale:.2f} px/cm")
+
+    if len(points) >= 8 and result["scale_px_per_cm"] > 0:
+        scale = result["scale_px_per_cm"]
+        p_ref1, p_ref2, p_origin, p_left, p_right, p_floor, p_bottom, p_top = points[:8]
+        result["pos"] = round_cm(abs(float(p_left["x"]) - float(p_origin["x"])) / scale)
+        result["larg"] = round_cm(abs(float(p_right["x"]) - float(p_left["x"])) / scale)
+        result["haut_sol"] = round_cm(abs(float(p_floor["y"]) - float(p_bottom["y"])) / scale)
+        result["haut"] = round_cm(abs(float(p_bottom["y"]) - float(p_top["y"])) / scale)
+        result["complete"] = True
+        annotated_final = draw_measure_points(display_img, points, steps)
+        result["annotated_path"] = save_pil_temp_jpg(annotated_final)
+        st.success(
+            f"Estimation : position {result['pos']} cm | largeur {result['larg']} cm | "
+            f"hauteur depuis sol {result['haut_sol']} cm | hauteur {result['haut']} cm"
+        )
+
+    return result
+
 def make_pdf_message(data, image_path, photo_paths):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -252,6 +431,10 @@ def make_pdf_message(data, image_path, photo_paths):
             else:
                 pdf_cell(pdf, 6, f"Référence photo : {c['reference']}")
                 pdf_cell(pdf, 6, f"Mesure connue : {c['mesure_connue']} cm | Commentaire repère : {c['commentaire_photo'] or '-'}")
+                if c.get('calc_complete'):
+                    pdf_cell(pdf, 6, f"Estimation depuis photo : Pos gauche {c.get('pos', 0)} cm | Larg {c.get('larg', 0)} cm | Haut. sol {c.get('haut_sol', 0)} cm | Haut {c.get('haut', 0)} cm | Epais {c.get('epais', 0)} cm")
+                else:
+                    pdf_cell(pdf, 6, "Estimation depuis photo : non complète / non utilisée")
             if c.get('commentaire'):
                 pdf_cell(pdf, 6, f"Commentaire : {c['commentaire']}")
             pdf_cell(pdf, 6, f"Photo : {c['photo_nom'] or 'Non jointe'}")
@@ -449,7 +632,14 @@ for i in range(int(nb_contraintes)):
             "mode": mode,
             "pos": 0.0, "larg": 0.0, "epais": 0.0, "haut_sol": 0.0, "haut": 0.0,
             "reference": "", "mesure_connue": 0.0, "commentaire_photo": "", "commentaire": "", "photo_nom": "",
+            "calc_complete": False, "calc_points": 0,
         }
+        c_photo = st.file_uploader("Photo de la contrainte", type=["jpg", "jpeg", "png"], key=f"photo_contrainte_{i}")
+        c_data["photo_nom"] = c_photo.name if c_photo else ""
+        c_path = uploaded_image_to_temp(c_photo)
+        if c_path:
+            photo_paths.append((f"Contrainte {i+1:02d} - {c_data['type']} - Mur {c_mur}", c_path))
+
         if mode == "Mesure directe":
             d1, d2 = st.columns(2)
             c_data["pos"] = d1.number_input("Position depuis la gauche (cm)", min_value=0.0, max_value=10000.0, value=0.0, step=1.0, key=f"cpos_{i}")
@@ -459,15 +649,23 @@ for i in range(int(nb_contraintes)):
             c_data["haut"] = d4.number_input("Hauteur de la contrainte (cm)", min_value=0.0, max_value=500.0, value=0.0, step=1.0, key=f"chaut_{i}")
             c_data["epais"] = d5.number_input("Épaisseur (cm)", min_value=0.0, max_value=200.0, value=0.0, step=1.0, key=f"cepais_{i}")
         else:
-            st.caption("Prenez le mur de face avec une feuille A4 ou un mètre visible. La V2 consigne la photo et la référence ; le calcul par clics pourra être ajouté en V3.")
+            st.caption("Photo de face conseillée. Placez une feuille A4 ou un mètre visible, puis cliquez les points demandés pour obtenir une estimation.")
             c_data["reference"] = st.selectbox("Repère visible sur la photo", ["Feuille A4", "Mètre", "Distance connue", "Autre"], key=f"ref_{i}")
             c_data["mesure_connue"] = st.number_input("Mesure connue visible sur la photo (cm)", min_value=0.0, max_value=1000.0, value=29.7, step=0.1, key=f"mes_connue_{i}")
-            c_data["commentaire_photo"] = st.text_input("Commentaire repère / position", placeholder="Ex : contrainte à droite de la feuille A4, prise au-dessus du plan de travail...", key=f"comment_photo_{i}")
-        c_photo = st.file_uploader("Photo de la contrainte", type=["jpg", "jpeg", "png"], key=f"photo_contrainte_{i}")
-        c_data["photo_nom"] = c_photo.name if c_photo else ""
-        c_path = uploaded_image_to_temp(c_photo)
-        if c_path:
-            photo_paths.append((f"Contrainte {i+1:02d} - {c_data['type']} - Mur {c_mur}", c_path))
+            c_data["commentaire_photo"] = st.text_input("Commentaire repère / position", placeholder="Précision utile sur la photo", key=f"comment_photo_{i}")
+            calc = photo_measurement_assistant(c_photo, f"contrainte_{i}")
+            c_data["calc_complete"] = calc.get("complete", False)
+            c_data["calc_points"] = calc.get("points_count", 0)
+            if calc.get("complete"):
+                use_calc = st.checkbox("Utiliser cette estimation dans le rapport", value=True, key=f"use_calc_{i}")
+                if use_calc:
+                    c_data["pos"] = calc.get("pos", 0.0)
+                    c_data["larg"] = calc.get("larg", 0.0)
+                    c_data["haut_sol"] = calc.get("haut_sol", 0.0)
+                    c_data["haut"] = calc.get("haut", 0.0)
+                if calc.get("annotated_path"):
+                    photo_paths.append((f"Repérage photo {i+1:02d} - {c_data['type']} - Mur {c_mur}", calc.get("annotated_path")))
+            c_data["epais"] = st.number_input("Épaisseur à reporter (cm)", min_value=0.0, max_value=200.0, value=0.0, step=1.0, key=f"cepais_photo_{i}")
         c_data["commentaire"] = st.text_area("Commentaire contrainte", key=f"comment_contrainte_{i}")
         contraintes.append(c_data)
 
@@ -567,6 +765,8 @@ if valeur_terre in ["Valeur pas ok", "Impossible à mesurer"] and not photos_che
 for c in contraintes:
     if c["mur"] == "-- Sélectionnez --":
         alertes.append(f"Contrainte '{c['type']}' sans mur support.")
+    if c.get("mode") == "Photo avec repère A4 / mètre" and c.get("photo_nom") and not c.get("calc_complete"):
+        alertes.append(f"Contrainte '{c['type']}' avec photo repère : calcul par points non complet.")
 
 if alertes:
     with st.expander("Alertes du relevé", expanded=True):
